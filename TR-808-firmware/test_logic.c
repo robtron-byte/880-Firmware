@@ -161,6 +161,20 @@ void test_attr_validate_and_direction(void) {
 	TEST_ASSERT_EQUAL_UINT8(DIR_RANDOM, attr_direction(&a));
 }
 
+void test_attr_copy_var(void) {
+	struct attr_block a;
+	attr_clear(&a);
+	attr_set(&a, attr_key(0, 0, 1, 3), 2, 3);
+	attr_set(&a, attr_key(1, 0, 4, 2), 1, 2);
+	attr_set(&a, attr_key(0, 1, 9, 9), 4, 1); /* replaced */
+	attr_copy_var(&a, 0, 1);
+	TEST_ASSERT_EQUAL_UINT8(4, attr_count(&a));
+	TEST_ASSERT_EQUAL_UINT8(3, attr_get_ratchet(&a, attr_key(0, 1, 1, 3)));
+	TEST_ASSERT_EQUAL_UINT8(2, attr_get_ratchet(&a, attr_key(1, 1, 4, 2)));
+	TEST_ASSERT_EQUAL_UINT8(1, attr_get_odds(&a, attr_key(0, 1, 9, 9)));
+	TEST_ASSERT_EQUAL_UINT8(3, attr_get_ratchet(&a, attr_key(0, 0, 1, 3)));
+}
+
 /* ---- odds / ratchets ---- */
 void test_odds(void) {
 	for (uint8_t p = 0; p < 12; p++) {
@@ -199,6 +213,7 @@ int main(void) {
 	RUN_TEST(test_attr_remove_inst_and_part);
 	RUN_TEST(test_attr_copy_part);
 	RUN_TEST(test_attr_validate_and_direction);
+	RUN_TEST(test_attr_copy_var);
 	RUN_TEST(test_odds);
 	RUN_TEST(test_ratchet_ticks);
 	return UNITY_END();

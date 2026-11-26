@@ -195,6 +195,28 @@ void attr_copy_part(struct attr_block *a, uint8_t src, uint8_t dst) {
 	}
 }
 
+void attr_copy_var(struct attr_block *a, uint8_t src, uint8_t dst) {
+	if ((src & 1) == (dst & 1)) return;
+	uint8_t i = 0;
+	while (i < attr_count(a)) { //remove the destination entries
+		if (((a->entry[i] >> 5) & 1) == (dst & 1)) {
+			attr_delete_at(a, i);
+		} else {
+			i++;
+		}
+	}
+	uint8_t n = attr_count(a);
+	for (i = 0; i < n; i++) {
+		uint16_t e = a->entry[i];
+		if (((e >> 5) & 1) == (src & 1)) {
+			uint8_t c = attr_count(a);
+			if (c >= ATTR_MAX) return;
+			a->entry[c] = (e & ~(1u << 5)) | ((uint16_t)(dst & 1) << 5);
+			attr_set_count(a, c + 1);
+		}
+	}
+}
+
 uint8_t odds_play(uint8_t odds, uint8_t pass) {
 	if (odds <= 1) return 1;
 	return (pass % odds) == 0;

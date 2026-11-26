@@ -557,6 +557,15 @@ void second_part_leave(void) {
 	}
 }
 
+/* SHIFT + CLEAR in EDIT: variation A -> B (both parts, odds/ratchets included) */
+void copy_variation_a_to_b(void) {
+	sequencer.pattern[VAR_B] = sequencer.pattern[VAR_A];
+	attr_copy_var(&pattern_attrs, VAR_A, VAR_B);
+	flag.pattern_edit = 1;
+	if (sequencer.part_editing == SECOND) sequencer.second_untouched = 0;
+	update_inst_led_mask();
+}
+
 /* ---- CLEAR in EDIT ---- */
 void clear_current_instrument(void) {
 	uint8_t v = sequencer.current_variation;

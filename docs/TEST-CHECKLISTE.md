@@ -17,7 +17,8 @@ Rückweg jederzeit: [Original-Firmware aufspielen](UPDATE-ANLEITUNG.md#wenn-etwa
 - [ ] B3 CLEAR klicken löscht nur das Instrument, CLEAR zweimal das ganze Pattern.
 - [ ] B4 Länge: CLEAR + Step. I/F-VAR + MODE: 2nd PART ist eine Kopie, ohne Änderung wieder raus = weg.
 - [ ] B5 Ratchet: Step halten + TAP (1×–4×), Odds: Step halten + SHIFT – hörbar richtig?
-- [ ] B6 Änderungen sind nach Pattern-Wechsel und nach Aus/Ein gespeichert.
+- [ ] B6 SHIFT + CLEAR kopiert Variation A nach B. PRE-SCALE-LEDs zählen beim Abspielen 1–2–3–4.
+- [ ] B7 Änderungen sind nach Pattern-Wechsel und nach Aus/Ein gespeichert.
 
 ## C. Wechsel und Patterns
 - [ ] C1 MODE mehrfach während des Spielens: Pattern und Takt ändern sich **nicht**.

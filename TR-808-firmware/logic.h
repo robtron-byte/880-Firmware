@@ -76,6 +76,8 @@ uint8_t attr_set(struct attr_block *a, uint16_t key, uint8_t odds, uint8_t ratch
 void attr_remove_inst(struct attr_block *a, uint8_t var, uint8_t inst);
 /* remove every entry of a part (both variations) */
 void attr_remove_part(struct attr_block *a, uint8_t part);
+/* copy all entries of variation `src` to variation `dst` (dst entries are replaced) */
+void attr_copy_var(struct attr_block *a, uint8_t src, uint8_t dst);
 /* copy all entries of part `src` to part `dst` (dst entries are replaced) */
 void attr_copy_part(struct attr_block *a, uint8_t src, uint8_t dst);
 

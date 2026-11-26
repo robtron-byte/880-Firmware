@@ -11,7 +11,8 @@
  *   SHIFT + BASIC-VARIATION variation A -> AB -> B
  *   I/F-VAR + step 13-16    direction forward / reverse / ping-pong / random
  *   SHIFT + TAP             reload the pattern as it was when it was selected
- *   (pre-scale is fixed to PRE-SCALE 3)
+ *   (pre-scale is fixed to PRE-SCALE 3; its LEDs count the passes 1-4)
+ *   SHIFT + CLEAR           EDIT: copy variation A to B
  *   EDIT:    steps set/clear, held step + TAP = ratchet, held step + SHIFT = odds,
  *            TAP = tap write, CLEAR click = clear instrument, double click = clear pattern
  *   PERFORM: I/F-VAR click = instrument keys MUTE <-> SELECT, SHIFT click = step keys STEPS <-> LOOP,
@@ -683,6 +684,18 @@ static void handle_step_keys(void) {
 	}
 }
 
+/* SHIFT + CLEAR (EDIT): copy variation A to B */
+static void handle_shift_clear(void) {
+	if (!button[CLEAR_SW].state || !sequencer.SHIFT) return;
+	button[CLEAR_SW].state = 0;
+	m_shift.used = 1;
+	m_clear.used = 1;
+	if (!IS_EDIT(sequencer.mode)) return;
+	copy_variation_a_to_b();
+	clear_flash = 1;
+	clear_flash_t = ui_ticks;
+}
+
 static void handle_clicks(void) {
 	if (clicked(&m_shift)) {
 		if (perform() && !sequencer.pattern_layer) {
@@ -729,6 +742,11 @@ static void update_loop(void) {
 }
 
 static void service_storage(void) {
+	if (!sequencer.START && flag.pattern_edit && storage_idle()) { //edits while stopped are stored right away
+		flag.pattern_edit = 0;
+		start_write_current_pattern(sequencer.current_pattern, sequencer.pattern_bank);
+		attr_queue_current();
+	}
 	storage_service();
 	if (recall_dirty && !sequencer.START && storage_idle()) {
 		recall_dirty = 0;
@@ -867,7 +885,9 @@ static void render_mode_leds(uint8_t blink, uint8_t fast) {
 		uint16_t key = attr_key(sequencer.part_editing, sequencer.current_variation, hs_step, sequencer.current_inst);
 		uint8_t n = hs_show_odds ? attr_get_odds(&pattern_attrs, key) : attr_get_ratchet(&pattern_attrs, key);
 		if (!(hs_show_odds && !blink)) spi_data[LATCH_5] |= 1 << (6 - n); //odds blink, ratchet steady
-	} //otherwise off: the resolution is fixed
+	} else if (sequencer.START) { //pass counter 1-4 (odds: every 2nd/3rd/4th pass)
+		spi_data[LATCH_5] |= 1 << (6 - ((sequencer.pass_count & 3) + 1));
+	}
 }
 
 static void render(void) {
@@ -883,6 +903,7 @@ static void render(void) {
 void ui_service(void) {
 	sample_keys();
 	track_modifiers();
+	handle_shift_clear();
 	handle_mode_key();
 	handle_variation_key();
 	handle_tap();

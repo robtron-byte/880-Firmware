@@ -136,12 +136,13 @@ Gespeichert wird **immer automatisch am Taktende**.
 | 2nd PART entfernen | **CLEAR halten + Step 1** im 2nd PART | |
 | Aktuelles Instrument löschen | **CLEAR klicken** | |
 | Ganzes Pattern löschen | **CLEAR zweimal kurz** | |
+| Variation A nach B kopieren | **SHIFT + CLEAR** | beide Parts, inkl. Odds/Ratchets; Steps blinken kurz |
 | Shuffle | **SHIFT halten + Step 1–6** | |
 | Mute an/aus | **SHIFT halten + Instrument** | |
 | Alle Mutes aufheben | **CLEAR + Instrument 1** | |
 | Solo | **CLEAR + Instrument** | wie bisher |
 
-Die PRE-SCALE-LEDs sind sonst aus, die Auflösung ist fest. Odds und Ratchets: höchstens **31 Steps pro Pattern** (beide Parts und Variationen zusammen). Ist die Liste voll, blinken die Steps kurz.
+Die **PRE-SCALE-LEDs 1–4 zählen die Durchläufe** des Patterns, solange es läuft. Daran siehst du, wann Steps mit Odds „jeder 2./3./4. Durchlauf“ dran sind: Sie spielen bei LED 1, „jeder 2.“ auch bei LED 3. Odds und Ratchets: höchstens **31 Steps pro Pattern** (beide Parts und Variationen zusammen). Ist die Liste voll, blinken die Steps kurz.
 
 ---
 
@@ -170,7 +171,7 @@ Die PRE-SCALE-LEDs sind sonst aus, die Auflösung ist fest. Odds und Ratchets: h
 - Trigger-Eingänge (TII) und frei wählbare Trigger-Zuweisung
 - Pre-Scale-Wahl (SHIFT + CLEAR): Die Auflösung ist fest auf PRE-SCALE 3 (16tel im 4/4-Takt). Patterns mit anderem Pre-Scale spielen in dieser Auflösung und werden beim nächsten Speichern so abgelegt.
 - Shift-Lock (SHIFT + ACCENT)
-- Step-Fill (SHIFT + TAP), Instrument löschen mit CLEAR + TAP, Variation A→B kopieren (CLEAR + BASIC-VAR)
+- Step-Fill (SHIFT + TAP), Instrument löschen mit CLEAR + TAP; Variation A→B kopieren liegt jetzt auf SHIFT + CLEAR
 - Pattern-Kopieren bei Stop mit CLEAR + Step; Ersatz ist das neue Kopieren in PERFORM
 
 **Achtung beim Zurückspielen der Original-Firmware:**

@@ -179,5 +179,6 @@ void second_part_leave(void);
 void clear_current_pattern(void);
 void clear_current_instrument(void);
 void apply_length_changes(void);
+void copy_variation_a_to_b(void);
 
 #endif
