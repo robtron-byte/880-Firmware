@@ -45,7 +45,7 @@ LDLIBS  := -lm
 PROGRAMMER ?= usbasp
 PORT       ?= usb
 
-.PHONY: all clean dfp test flash size syx selftest
+.PHONY: all clean dfp test flash size syx selftest release
 
 all: $(TARGET).hex $(TARGET).eep $(TARGET).syx size
 
@@ -53,6 +53,9 @@ $(TARGET).syx: $(TARGET).hex
 	python3 tools/hex2syx.py $< $@ --max-size $(FLASH_LIMIT)
 
 syx: $(TARGET).syx
+
+release: all test
+	cp $(TARGET).syx firmware/880-perform.syx
 
 selftest:
 	python3 tools/hex2syx.py --selftest firmware/official/880-1.1.4-MK2.syx
