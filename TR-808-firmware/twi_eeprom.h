@@ -68,6 +68,7 @@ void attr_queue_current(void); //snapshot pattern_attrs of the current pattern f
 uint8_t pattern_writer_busy(void);
 void storage_service(void); //call every refresh: performs at most one background EEPROM operation
 uint8_t storage_idle(void);
+void storage_finish_for(uint8_t pattern, uint8_t bank);
 void storage_queue_backup(void); //copy the current (stored) pattern into the reload backup slot
 uint8_t storage_reload(void); //copy the reload backup into RAM, returns 0 if there is none
 uint8_t storage_queue_copy(uint8_t src_pattern, uint8_t src_bank, uint8_t dst_pattern, uint8_t dst_bank);

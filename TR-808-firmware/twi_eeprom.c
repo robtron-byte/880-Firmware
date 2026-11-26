@@ -433,3 +433,10 @@ void clear_all_patterns(void) {
 	eeprom_write_recall_data(); //initialize recall data in eeprom
 	wdt_enable(WDTO_1S);
 }
+
+/* finish a queued copy/clear into this pattern before it is loaded */
+void storage_finish_for(uint8_t pattern, uint8_t bank) {
+	if (job.type != JOB_NONE && job.dst_pattern == pattern && job.dst_bank == bank) {
+		while (job.type != JOB_NONE) storage_service();
+	}
+}

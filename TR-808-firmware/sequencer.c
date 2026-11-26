@@ -486,6 +486,7 @@ void toggle_variation(void) {
 
 void read_next_pattern(uint8_t pattern_num, uint8_t pattern_bank) {
 	pattern_data next_pattern;
+	storage_finish_for(pattern_num, pattern_bank);
 	next_pattern = read_pattern(pattern_num*PAGES_PER_PATTERN*PAGE_SIZE, pattern_bank);
 	if (next_pattern.step_num[FIRST] > 15) { //erased EEPROM
 		default_pattern_data(&next_pattern);
@@ -514,6 +515,7 @@ void pattern_take(uint8_t pattern_num, uint8_t pattern_bank, uint8_t backup) {
 	read_next_pattern(pattern_num, pattern_bank);
 	sequencer.current_pattern = sequencer.new_pattern = pattern_num;
 	sequencer.pattern_bank = sequencer.new_bank = pattern_bank;
+	if (sequencer.mode == SECOND_PART) second_part_autocopy(); //still editing the 2nd part
 	if (changed && backup) {
 		storage_queue_backup(); //for reload
 		recall_dirty = 1;

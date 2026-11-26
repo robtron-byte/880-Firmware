@@ -336,7 +336,9 @@ static void handle_tap(void) {
 	} else if (sequencer.mode == PATTERN_CLEAR) {
 		if (sequencer.CLEAR) {
 			m_clear.used = 1;
-			if (clear_all_armed && (uint16_t)(ui_ticks - clear_all_t) < CONFIRM_TICKS) {
+			if (sequencer.START) {
+				clear_all_armed = 0; //only when stopped
+			} else if (clear_all_armed && (uint16_t)(ui_ticks - clear_all_t) < CONFIRM_TICKS) {
 				clear_all_armed = 0;
 				clear_all_patterns();
 				read_next_pattern(sequencer.current_pattern, sequencer.pattern_bank);
@@ -346,7 +348,11 @@ static void handle_tap(void) {
 			}
 		}
 	} else if (IS_EDIT(sequencer.mode)) {
-		if (sequencer.START) tap_write();
+		if (sequencer.CLEAR) {
+			m_clear.used = 1;
+		} else if (sequencer.START) {
+			tap_write();
+		}
 	} else if (perform()) {
 		if (sequencer.START) {
 			flag.fill = 1; //fill in the next measure
@@ -393,10 +399,10 @@ static void handle_inst_keys(void) {
 		uint8_t k = i - INST_AC_1_SW; //0 = AC (key 1) ... 11 = CH (key 12)
 		uint8_t d = k - 1; //drum index for k >= 1
 		if (perform()) {
-			if (sequencer.ALT && k >= 4 && k <= 6) { //toms
+			if (sequencer.ALT && k >= 3 && k <= 5) { //keys 4-6: toms
 				m_alt.used = 1;
 				live_hit(d);
-			} else if (sequencer.SHIFT && k >= 4 && k <= 8) { //congas, claves, maracas
+			} else if (sequencer.SHIFT && k >= 3 && k <= 7) { //keys 4-8: congas, claves, maracas
 				m_shift.used = 1;
 				live_hit(d + SW_DRUM_OFFSET);
 			} else if (sequencer.CLEAR && k >= 1) {
@@ -494,7 +500,10 @@ static void pattern_layer_step(uint8_t k) {
 				if (copy_src == sequencer.current_pattern && copy_src_bank == sequencer.pattern_bank) flush_current();
 				if (storage_queue_copy(copy_src, copy_src_bank, k, bank)) {
 					if (k == sequencer.current_pattern && bank == sequencer.pattern_bank) {
-						//the playing pattern was overwritten: take the new content
+						//the playing pattern was overwritten: take the new content, drop unsaved edits
+						flag.pattern_edit = 0;
+						flag.length_change = 0;
+						flag.second_clear = 0;
 						if (sequencer.START) {
 							sequencer.new_pattern = k;
 							flag.pattern_change = 1;
@@ -622,7 +631,7 @@ static void handle_step_keys(void) {
 			} else {
 				if (sequencer.SHIFT) {
 					m_shift.used = 1;
-					if (sequencer.TAP_HELD && k == DIN_RESET_STEP) {
+					if (sequencer.mode == PATTERN_CLEAR && k == DIN_RESET_STEP) { //PATTERN CLEAR: SHIFT + step 8
 						sequencer.din_reset_enable ^= 1;
 						recall_dirty = 1;
 					} else if (sequencer.clock_mode == DIN_SYNC_SLAVE && k < NUM_SYNC_COUNTS) {
@@ -758,10 +767,10 @@ static void render_steps(uint8_t blink, uint8_t fast) {
 	} else if (hs_step != NONE) {
 		m = inst_mask_for(sequencer.part_editing);
 		if (fast) m ^= (1u << hs_step);
-	} else if (sequencer.SHIFT && sequencer.mode != PATTERN_CLEAR && !(sequencer.pattern_layer && perform())) {
-		if (!sequencer.START && sequencer.TAP_HELD) {
-			if (sequencer.din_reset_enable) m = 1u << DIN_RESET_STEP;
-		} else if (!sequencer.START && sequencer.clock_mode == DIN_SYNC_SLAVE) {
+	} else if (sequencer.SHIFT && sequencer.mode == PATTERN_CLEAR) {
+		if (sequencer.din_reset_enable) m = 1u << DIN_RESET_STEP;
+	} else if (sequencer.SHIFT && !(sequencer.pattern_layer && perform())) {
+		if (!sequencer.START && sequencer.clock_mode == DIN_SYNC_SLAVE) {
 			m = 1u << clock.sync_count_index;
 		} else {
 			m = 1u << sequencer.new_shuffle_amount;
