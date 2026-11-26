@@ -6,6 +6,10 @@
 #   make test    # run the host unit tests
 #   make flash   # flash with avrdude (set PROGRAMMER/PORT)
 #
+# Flash limit: the sysex bootloader sits at the top of flash (max 4 KB on the
+# ATmega328PB), so the application must stay below 28672 bytes.
+FLASH_LIMIT := 28672
+
 # Requires: avr-gcc, avr-libc, binutils-avr (apt install gcc-avr avr-libc binutils-avr)
 
 MCU      := atmega328pb
@@ -31,19 +35,27 @@ SRCS := adc.c clock.c drums.c interrupts.c leds.c main.c midi.c mode.c \
 OBJS := $(addprefix $(BUILD)/obj/,$(SRCS:.c=.o))
 
 CFLAGS := -mmcu=$(MCU) -B $(DFP_DIR)/gcc/dev/$(MCU) -I $(DFP_DIR)/include \
-          -DNDEBUG -O1 -std=gnu99 -Wall \
+          -DNDEBUG -Os -flto -mrelax -mcall-prologues -std=gnu99 -Wall \
           -funsigned-char -funsigned-bitfields -fpack-struct -fshort-enums \
           -ffunction-sections -fdata-sections
-LDFLAGS := -mmcu=$(MCU) -B $(DFP_DIR)/gcc/dev/$(MCU) \
-           -Wl,--gc-sections -Wl,-Map=$(TARGET).map
+LDFLAGS := -mmcu=$(MCU) -B $(DFP_DIR)/gcc/dev/$(MCU) -Os -flto -mrelax -mcall-prologues \
+           -Wl,--relax -Wl,--gc-sections -Wl,-Map=$(TARGET).map
 LDLIBS  := -lm
 
 PROGRAMMER ?= usbasp
 PORT       ?= usb
 
-.PHONY: all clean dfp test flash size
+.PHONY: all clean dfp test flash size syx selftest
 
-all: $(TARGET).hex $(TARGET).eep size
+all: $(TARGET).hex $(TARGET).eep $(TARGET).syx size
+
+$(TARGET).syx: $(TARGET).hex
+	python3 tools/hex2syx.py $< $@ --max-size $(FLASH_LIMIT)
+
+syx: $(TARGET).syx
+
+selftest:
+	python3 tools/hex2syx.py --selftest firmware/official/880-1.1.4-MK2.syx
 
 $(DFP_DIR)/include/avr/iom328pb.h:
 	@echo "Device pack missing - run 'make dfp' first" && exit 1
@@ -69,9 +81,12 @@ $(TARGET).eep: $(TARGET).elf
 
 size: $(TARGET).elf
 	@$(SIZE) $<
-	@echo "Flash limit 32768 B, SRAM limit 2048 B"
+	@$(SIZE) $< | awk 'NR==2 { flash=$$1+$$2; ram=$$2+$$3; \
+	  printf "Flash %d / $(FLASH_LIMIT) B, RAM %d / 2048 B (free %d B for stack)\n", flash, ram, 2048-ram; \
+	  if (flash > $(FLASH_LIMIT)) { print "ERROR: flash too large"; exit 1 } \
+	  if (2048-ram < 500) { print "ERROR: less than 500 B RAM left for stack"; exit 1 } }'
 
-test:
+test: selftest
 	cd $(SRC_DIR) && bash run_tests.sh
 
 flash: $(TARGET).hex
