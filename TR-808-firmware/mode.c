@@ -15,7 +15,6 @@
 #include "spi.h"
 #include "twi_eeprom.h"
 
-uint8_t mode_index = 1; //default mode is pattern edit 1st part
 uint8_t fill_index = 0;
 uint8_t sync_index = 0;
 
@@ -73,47 +72,6 @@ void update_fill_leds(uint8_t fill_index) {
 	
 	
 
-void check_mode_switch(void) { //rename to check_mode_switch
-	
-	if (button[MODE_SW].state) {
-		
-		button[MODE_SW].state ^= button[MODE_SW].state; //toggle switch state
-		
-		if (sequencer.SHIFT) {
-			
-			if ((sequencer.mode == COMPOSE_RHYTHM) && (sequencer.track_mode == CREATE)) { //need to unstage last rhythm track edit
-				if (sequencer.track_measure > 0) sequencer.track_measure--;
-				if (sequencer.track_measure > 0) {
-					rhythm_track.length = sequencer.track_measure - 1;
-				} else {
-					rhythm_track.length = 0;
-				}
-				
-			} else if (sequencer.mode == SECOND_PART && sequencer.ALT) {
-				copy_part(SECOND);
-			}
-			if (mode_index-- == 0) mode_index = NUM_MODES - 1;
-			
-		} else {
-			 if (sequencer.mode == FIRST_PART && sequencer.ALT) copy_part(FIRST);
-			 if (++mode_index == NUM_MODES) mode_index = 0;
-			 
-		}
-		
-		if (flag.track_edit) {
-			
-			write_rhythm_track(); //write current pattern to eeprom
-			flag.track_edit = 0;
-		}
-		
-		//replace code below with 
-		//set_mode(mode_index) or something so that mode can be set outside of update_mode() for TII setting
-		set_mode(mode_index);
-	
-	}
-		
-}
-	
 void check_fill_switch(void) {
 	uint8_t fill_mode[NUM_FILL_MODES] = {MANUAL, 15, 11, 7, 3, 1};
 	
@@ -154,54 +112,25 @@ void check_fill_switch(void) {
 	}
 }
 
-void set_mode(uint8_t mode_index) {
-	    enum global_mode current_mode[NUM_MODES] = {PATTERN_CLEAR, FIRST_PART, SECOND_PART, MANUAL_PLAY, PLAY_RHYTHM, COMPOSE_RHYTHM};
-		sequencer.mode = current_mode[mode_index];
-		//uint8_t data_mask = spi_data[4] & 0b11000000; //mask to preserve top two bits of SPI byte 4
-		spi_data[LATCH_4] &= MODE_LED_MASK;
-		spi_data[LATCH_4] |= (1<< mode_index);
-		
-		
-		//if (sequencer.step_num[SECOND] != NO_STEPS) sequencer.step_num_new = sequencer.step_num[sequencer.part_editing]; //another annoying except
-		
-		switch (sequencer.mode) {
-			
-			case FIRST_PART: case SECOND_PART: //don't need to read pattern when switching between FIRST PART and SECOND PART - this is unnecessary overhead, but does it matter?
-			//yes because you could read the next pattern before committing an edited pattern to memory... need to fix this
-			sequencer.pattern_bank = sequencer.previous_bank;
-			sequencer.current_pattern = sequencer.new_pattern = sequencer.previous_pattern;
-
-			if (!flag.pattern_edit) read_next_pattern(sequencer.current_pattern, sequencer.pattern_bank); //not sure if this is good - new copy_part() function only sets flag.pattern_edit, so set_mode() reads pattern from rom before copy is written
-			sequencer.part_editing = sequencer.mode == FIRST_PART? FIRST : SECOND;
-			sequencer.step_num_new = sequencer.step_num[sequencer.part_editing];
-			//update_step_led_mask(); //want to update led mask immediately, otherwise it only gets updated at end of measure
-			update_inst_led_mask();
-			break;
-
-			case MANUAL_PLAY:
-			//if current pattern is 12 or greater then it needs to be set to 12 to avoid overlap with intro/fill pattern selection - this mimics original TR-808 behaviour
-			sequencer.pattern_bank = sequencer.previous_bank;
-			if (sequencer.current_pattern > 11) { //make 11 a constant here
-				sequencer.previous_pattern = sequencer.current_pattern; //save current pattern for return to pattern edit mode
-				sequencer.new_pattern = 11;
-				flag.pattern_change = 1; //bug here where another pattern is played?
-			}
-			break;
-			
-			case PLAY_RHYTHM: case COMPOSE_RHYTHM:
-			//will need to update inst/track leds to current rhythm track, rather than resetting to 0
-			sequencer.previous_bank = sequencer.pattern_bank;
-			update_rhythm_track(sequencer.current_rhythm_track);
-
-			break;
-			
-
-			default:
-			
-			break;
-		}
-
-			
+/* 880 Perform: switching modes never loads a pattern, never changes the running
+ * pattern, the measure position or the mutes. */
+void set_mode(uint8_t new_mode) {
+	uint8_t old_mode = sequencer.mode;
+	if (old_mode == SECOND_PART && new_mode != SECOND_PART) second_part_leave();
+	sequencer.mode = new_mode;
+	if (IS_EDIT(new_mode)) {
+		sequencer.part_editing = (new_mode == SECOND_PART) ? SECOND : FIRST;
+		if (new_mode == SECOND_PART && sequencer.step_num[SECOND] == NO_STEPS) second_part_autocopy();
+	} else if (new_mode == MANUAL_PLAY && old_mode != MANUAL_PLAY) {
+		sequencer.inst_layer = INST_LAYER_MUTE;
+		sequencer.step_layer = STEP_LAYER_LOOP;
+		sequencer.loop_mask = 0;
+	}
+	if (new_mode != MANUAL_PLAY) {
+		sequencer.recording = 0;
+		sequencer.loop_mask = 0;
+	}
+	update_inst_led_mask();
 }
 
 void set_clock_mode(uint8_t sync_index) {

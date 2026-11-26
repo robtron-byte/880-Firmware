@@ -82,7 +82,6 @@ struct led{
 	};
 
 extern struct led led[NUM_LEDS];
-extern uint8_t track_led[NUM_TRACKS];
 	
 void turn_on(uint8_t led_index);
 void turn_off(uint8_t led_index);
@@ -100,15 +99,11 @@ void show_mutes(void);
 
 void show_version_inst(void);
 
-void update_inst_leds(void);
 
-void update_step_led_mask(void);
 
 void update_inst_led_mask(void);
 
-void update_prescale_leds(void);
 
-void refresh_step_leds(void); //update step board spi bytes if step number changes
 
 void set_up_led_timer(void);
 	

@@ -1,0 +1,902 @@
+/*
+ * ui.c
+ * 880 Perform: key handling and LED rendering.
+ *
+ * Overview (see docs/BEDIENUNGSANLEITUNG.md):
+ *   MODE                    EDIT <-> PERFORM (never changes the running pattern)
+ *   I/F-VAR + MODE          EDIT: 1st <-> 2nd part (empty 2nd part is a copy of the 1st)
+ *   SHIFT + MODE            PATTERN CLEAR (clear all: CLEAR held + TAP twice, version: SHIFT + TAP held)
+ *   BASIC-VARIATION click   pattern layer on/off (steps 1-12 select the pattern)
+ *   BASIC-VARIATION held    + step 1-12 selects the bank
+ *   SHIFT + BASIC-VARIATION variation A -> AB -> B
+ *   I/F-VAR + step 13-16    direction forward / reverse / ping-pong / random
+ *   SHIFT + TAP             reload the pattern as it was when it was selected
+ *   EDIT:    steps set/clear, held step + TAP = ratchet, held step + SHIFT = odds,
+ *            TAP = tap write, CLEAR click = clear instrument, double click = clear pattern
+ *   PERFORM: I/F-VAR click = instrument keys MUTE <-> SELECT, SHIFT click = step keys STEPS <-> LOOP,
+ *            TAP = fill, I/F-VAR + TAP = record, I/F-VAR + inst 4-6 = toms, SHIFT + inst 4-8 = congas/CL/MA,
+ *            pattern layer: hold + press = chain, 13-16 = mute scenes (SHIFT = store),
+ *            SHIFT + source, SHIFT + target = copy, CLEAR + pattern twice = delete
+ */
+#include <avr/io.h>
+#include <string.h>
+#include "ui.h"
+#include "hardware.h"
+#include "sequencer.h"
+#include "switches.h"
+#include "leds.h"
+#include "spi.h"
+#include "drums.h"
+#include "clock.h"
+#include "mode.h"
+#include "twi_eeprom.h"
+#include "logic.h"
+
+#define NONE 0xFF
+#define CLICK_MAX_TICKS 60 //a press shorter than 600 ms (without other keys) is a click
+#define DOUBLE_CLICK_TICKS 40 //CLEAR twice within 400 ms
+#define CONFIRM_TICKS 200 //second press to confirm a delete within 2 s
+
+volatile uint16_t ui_ticks = 0;
+
+/* ---------- debounced key levels (sampled every 10 ms) ---------- */
+static uint8_t deb[5], sample_prev[5], deb_prev[5];
+static uint16_t last_sample_tick;
+
+static uint8_t level(const uint8_t *bytes, uint8_t btn) {
+	return (bytes[button[btn].spi_byte] >> button[btn].spi_bit) & 1;
+}
+static uint8_t raw_down(uint8_t btn) { return level(spi_previous_switch_data, btn); } //spi_previous_* holds the raw levels
+static uint8_t deb_down(uint8_t btn) { return level(deb, btn); }
+static uint8_t deb_released(uint8_t btn) { return level(deb_prev, btn) && !level(deb, btn); }
+static uint16_t raw_steps(void) { return spi_previous_switch_data[4] | ((uint16_t)spi_previous_switch_data[3] << 8); }
+
+static uint8_t press(uint8_t btn) { //consume a press event
+	if (button[btn].state) {
+		button[btn].state = 0;
+		return 1;
+	}
+	return 0;
+}
+
+/* ---------- modifier keys: click detection ---------- */
+struct modkey {
+	uint8_t btn;
+	uint8_t down:1;
+	uint8_t used:1; //another key was involved: no click
+	uint16_t t_down;
+};
+static struct modkey m_shift = {WRITE_SW}, m_alt = {IF_VAR_SW}, m_bvar = {BASIC_VAR_SW}, m_clear = {CLEAR_SW};
+static struct modkey *const mods[4] = {&m_shift, &m_alt, &m_bvar, &m_clear};
+
+/* ---------- UI state ---------- */
+static uint8_t prev_mode = FIRST_PART; //mode to return to from PATTERN CLEAR
+static uint8_t hs_step = NONE; //EDIT: held step (odds/ratchet editing)
+static uint8_t hs_was_on, hs_adjusted, hs_show_odds, hs_seen;
+static uint16_t hs_t;
+static uint16_t last_clear_click = 0;
+static uint8_t clear_flash = 0; //blink after a clear
+static uint16_t clear_flash_t;
+static uint8_t copy_src = NONE, copy_src_bank;
+static uint8_t del_armed = NONE;
+static uint16_t del_armed_t;
+static uint8_t clear_all_armed = 0;
+static uint16_t clear_all_t;
+static uint16_t prev_loop_mask = 0;
+
+void ui_init(void) {
+	//Timer4: 10 ms tick (16 MHz / 1024 / 156), CTC mode set up in setup_clock()
+	OCR4A = 155;
+	TIMSK4 |= (1<<OCIE4A);
+	sequencer.inst_layer = INST_LAYER_MUTE;
+	sequencer.step_layer = STEP_LAYER_LOOP;
+}
+
+static uint8_t any_other_key_down(uint8_t self) {
+	for (uint8_t i = 0; i < 5; i++) {
+		uint8_t d = deb[i];
+		if (i == button[self].spi_byte) d &= ~(1 << button[self].spi_bit);
+		if (d) return 1;
+	}
+	return sequencer.TAP_HELD;
+}
+
+static void sample_keys(void) {
+	uint16_t now = ui_ticks;
+	if (now == last_sample_tick) {
+		memcpy(deb_prev, deb, 5); //no new sample: no edges
+		return;
+	}
+	last_sample_tick = now;
+	memcpy(deb_prev, deb, 5);
+	for (uint8_t i = 0; i < 5; i++) {
+		uint8_t s = spi_previous_switch_data[i];
+		deb[i] = (s & sample_prev[i]) | (deb[i] & (s | sample_prev[i])); //2 sample debounce
+		sample_prev[i] = s;
+	}
+}
+
+/* any press event this refresh marks held modifiers as used */
+static void track_modifiers(void) {
+	uint8_t any_press = flag.tap;
+	for (uint8_t i = 0; i < NUM_BUTTONS; i++) {
+		if (button[i].state) any_press = 1;
+	}
+	for (uint8_t i = 0; i < 4; i++) {
+		struct modkey *m = mods[i];
+		uint8_t d = deb_down(m->btn);
+		if (d && !m->down) {
+			m->down = 1;
+			m->t_down = ui_ticks;
+			m->used = any_other_key_down(m->btn);
+		} else if (d && any_press && !button[m->btn].state) {
+			m->used = 1;
+		}
+	}
+}
+
+static uint8_t clicked(struct modkey *m) {
+	if (m->down && deb_released(m->btn)) {
+		m->down = 0;
+		return !m->used && (uint16_t)(ui_ticks - m->t_down) < CLICK_MAX_TICKS;
+	}
+	if (!deb_down(m->btn)) m->down = 0;
+	return 0;
+}
+
+/* ---------- helpers ---------- */
+static uint8_t perform(void) { return sequencer.mode == MANUAL_PLAY; }
+
+static void mute_toggle(uint8_t d) {
+	uint8_t m = !drum_hit[d].muted;
+	drum_hit[d].muted = m;
+	if (drum_hit[d].switch_bit != NO_SWITCH || d == CP) drum_hit[d + SW_DRUM_OFFSET].muted = m; //tom+conga, RS+CL, CP+MA
+	for (uint8_t i = BD; i <= MA; i++) drum_hit[i].solo = 0;
+}
+
+static void unmute_all(void) {
+	for (uint8_t i = BD; i <= AC; i++) {
+		drum_hit[i].muted = 0;
+		drum_hit[i].solo = 0;
+	}
+}
+
+static void solo_toggle(uint8_t d) {
+	if (drum_hit[d].solo) {
+		unmute_all();
+		return;
+	}
+	assign_solo(d);
+	if (drum_hit[d].switch_bit != NO_SWITCH || d == CP) drum_hit[d + SW_DRUM_OFFSET].muted = 0;
+}
+
+static void select_accent(void) {
+	sequencer.current_inst = AC;
+	update_inst_led_mask();
+}
+
+static void mark_part_edited(uint8_t part) {
+	flag.pattern_edit = 1;
+	if (part == SECOND) sequencer.second_untouched = 0;
+}
+
+static void write_hit(uint8_t part, uint8_t step, uint8_t inst) {
+	uint8_t v = sequencer.current_variation;
+	if (inst == AC) {
+		sequencer.pattern[v].accent[part] |= (1u << step);
+	} else {
+		sequencer.pattern[v].part[part][step] |= (1u << inst);
+	}
+	mark_part_edited(part);
+	update_inst_led_mask();
+}
+
+/* where does a hit at this moment belong to? (rounded to the nearest 16th) */
+static uint8_t locate_hit(uint8_t *part_out, uint8_t *step_out) {
+	uint8_t pending = flag.next_step || flag.shuffle_step;
+	uint8_t d = tap_decide(clock.ppqn_counter, clock.divider, pending);
+	if (d == TAP_CURRENT_SOUNDED) {
+		*part_out = sequencer.part_playing;
+		*step_out = sequencer.play_step;
+		return d;
+	}
+	//upcoming step
+	uint8_t part = sequencer.part_playing;
+	uint8_t last = sequencer.step_num[part];
+	uint8_t pos, wrap;
+	uint8_t pass = sequencer.pass_count;
+	if (pending) {
+		pos = sequencer.current_step;
+		wrap = flag.new_measure || pos > last;
+	} else {
+		pos = sequencer.current_step + 1;
+		wrap = pos > last;
+	}
+	if (wrap) {
+		pos = 0;
+		if (sequencer.step_num[SECOND] != NO_STEPS) {
+			part ^= 1;
+			if (part == FIRST) pass++;
+		} else {
+			pass++;
+		}
+		last = sequencer.step_num[part];
+	}
+	if (last > 15) last = 15;
+	uint8_t step;
+	if (sequencer.loop_mask) {
+		step = loop_pick(sequencer.loop_mask, sequencer.loop_idx);
+		if (step > last) step = last;
+	} else {
+		uint8_t dir = attr_direction(&pattern_attrs);
+		step = dir_map(dir, pos, last, pass, lfsr_next(sequencer.rnd ? sequencer.rnd : 0x5A));
+	}
+	*part_out = part;
+	*step_out = step;
+	return d;
+}
+
+/* live hit in PERFORM (toms/congas, recording) */
+static void live_hit(uint8_t inst) {
+	if (inst != AC) trigger_drum(inst, 0);
+	if (sequencer.recording && sequencer.START) {
+		uint8_t part, step;
+		uint8_t d = locate_hit(&part, &step);
+		write_hit(part, step, inst);
+		if (d != TAP_CURRENT_SOUNDED && inst != AC) sequencer.skip_mask |= (1u << inst); //already heard now
+	}
+}
+
+/* TAP in EDIT: write the selected instrument to the nearest step of the edited part */
+static void tap_write(void) {
+	uint8_t part, step;
+	uint8_t d = locate_hit(&part, &step);
+	uint8_t edit = sequencer.part_editing;
+	if (step > sequencer.step_num[edit]) return;
+	write_hit(edit, step, sequencer.current_inst);
+	if (d == TAP_CURRENT_SOUNDED && part == edit && sequencer.current_inst != AC) {
+		trigger_drum(sequencer.current_inst, 0); //that step already played: let it sound now
+	}
+}
+
+static void do_reload(void) {
+	if (sequencer.START) {
+		reload_pending = 1;
+	} else if (storage_reload()) {
+		clock.divider = pre_scale[sequencer.pre_scale];
+		flag.pre_scale_change = 0;
+		start_write_current_pattern(sequencer.current_pattern, sequencer.pattern_bank);
+		attr_queue_current();
+		update_inst_led_mask();
+	}
+	clear_flash = 1;
+	clear_flash_t = ui_ticks;
+}
+
+/* ---------- key handlers ---------- */
+
+static void handle_mode_key(void) {
+	if (!press(MODE_SW)) return;
+	if (sequencer.SHIFT) {
+		m_shift.used = 1;
+		if (sequencer.mode == PATTERN_CLEAR) {
+			set_mode(prev_mode);
+		} else {
+			prev_mode = sequencer.mode;
+			set_mode(PATTERN_CLEAR);
+		}
+	} else if (sequencer.ALT && IS_EDIT(sequencer.mode)) {
+		m_alt.used = 1;
+		set_mode(sequencer.mode == FIRST_PART ? SECOND_PART : FIRST_PART);
+	} else if (sequencer.mode == PATTERN_CLEAR) {
+		set_mode(prev_mode);
+	} else if (IS_EDIT(sequencer.mode)) {
+		set_mode(MANUAL_PLAY);
+	} else {
+		set_mode(FIRST_PART);
+	}
+	hs_step = NONE;
+}
+
+static void cycle_attr(uint8_t ratchet) {
+	uint8_t part = sequencer.part_editing, v = sequencer.current_variation;
+	if (sequencer.current_inst == AC || hs_step == NONE) return;
+	if (!((sequencer.pattern[v].part[part][hs_step] >> sequencer.current_inst) & 1)) return;
+	uint16_t key = attr_key(part, v, hs_step, sequencer.current_inst);
+	uint8_t odds = attr_get_odds(&pattern_attrs, key);
+	uint8_t rat = attr_get_ratchet(&pattern_attrs, key);
+	if (ratchet) {
+		rat = rat % 4 + 1;
+	} else {
+		odds = odds % 4 + 1;
+	}
+	if (attr_set(&pattern_attrs, key, odds, rat)) {
+		mark_part_edited(part);
+	} else {
+		clear_flash = 1; //list full: flash
+		clear_flash_t = ui_ticks;
+	}
+	hs_adjusted = 1;
+	hs_show_odds = !ratchet;
+}
+
+static void handle_tap(void) {
+	if (!flag.tap) return;
+	flag.tap = 0;
+	if (IS_EDIT(sequencer.mode) && hs_step != NONE) { //held step + TAP: ratchet
+		cycle_attr(1);
+		return;
+	}
+	if (sequencer.SHIFT && sequencer.mode != PATTERN_CLEAR) {
+		m_shift.used = 1;
+		do_reload();
+	} else if (sequencer.ALT && perform()) {
+		m_alt.used = 1;
+		sequencer.recording ^= 1;
+	} else if (sequencer.mode == PATTERN_CLEAR) {
+		if (sequencer.CLEAR) {
+			m_clear.used = 1;
+			if (clear_all_armed && (uint16_t)(ui_ticks - clear_all_t) < CONFIRM_TICKS) {
+				clear_all_armed = 0;
+				clear_all_patterns();
+				read_next_pattern(sequencer.current_pattern, sequencer.pattern_bank);
+			} else {
+				clear_all_armed = 1;
+				clear_all_t = ui_ticks;
+			}
+		}
+	} else if (IS_EDIT(sequencer.mode)) {
+		if (sequencer.START) tap_write();
+	} else if (perform()) {
+		if (sequencer.START) {
+			flag.fill = 1; //fill in the next measure
+		} else { //stopped: toggle intro
+			flag.intro ^= 1;
+			if (flag.intro) {
+				read_next_pattern(sequencer.current_intro_fill, sequencer.pattern_bank);
+				sequencer.new_pattern = sequencer.current_pattern;
+				sequencer.current_pattern = sequencer.current_intro_fill;
+			} else {
+				sequencer.current_pattern = sequencer.new_pattern;
+				read_next_pattern(sequencer.current_pattern, sequencer.pattern_bank);
+			}
+		}
+	}
+}
+
+static void handle_variation_key(void) {
+	if (!press(BASIC_VAR_SW)) return;
+	if (sequencer.SHIFT) { //variation A -> AB -> B -> A
+		m_shift.used = 1;
+		m_bvar.used = 1;
+		switch (sequencer.variation_mode) {
+			case VAR_A: sequencer.variation_mode = VAR_AB; break;
+			case VAR_AB: sequencer.variation_mode = VAR_B; break;
+			default: sequencer.variation_mode = VAR_A; break;
+		}
+		if (sequencer.START) {
+			flag.variation_change = 1;
+		} else {
+			sequencer.current_variation = (sequencer.variation_mode == VAR_B) ? VAR_B : VAR_A;
+		}
+		update_inst_led_mask();
+	} else if (sequencer.ALT) { //intro/fill variation
+		m_alt.used = 1;
+		m_bvar.used = 1;
+		sequencer.intro_fill_var ^= 1;
+	}
+}
+
+static void handle_inst_keys(void) {
+	for (uint8_t i = INST_AC_1_SW; i <= INST_CH_12_SW; i++) {
+		if (!press(i)) continue;
+		uint8_t k = i - INST_AC_1_SW; //0 = AC (key 1) ... 11 = CH (key 12)
+		uint8_t d = k - 1; //drum index for k >= 1
+		if (perform()) {
+			if (sequencer.ALT && k >= 4 && k <= 6) { //toms
+				m_alt.used = 1;
+				live_hit(d);
+			} else if (sequencer.SHIFT && k >= 4 && k <= 8) { //congas, claves, maracas
+				m_shift.used = 1;
+				live_hit(d + SW_DRUM_OFFSET);
+			} else if (sequencer.CLEAR && k >= 1) {
+				m_clear.used = 1;
+				solo_toggle(d);
+			} else if (sequencer.recording && sequencer.START) {
+				live_hit(k == 0 ? AC : d);
+			} else if (sequencer.inst_layer == INST_LAYER_MUTE) {
+				if (k == 0) {
+					unmute_all();
+				} else {
+					mute_toggle(d);
+				}
+			} else {
+				if (k == 0) {
+					select_accent();
+				} else {
+					select_instrument(d);
+				}
+			}
+		} else {
+			if (sequencer.SHIFT && k >= 1) {
+				m_shift.used = 1;
+				mute_toggle(d);
+			} else if (k == 0) {
+				if (sequencer.CLEAR) {
+					m_clear.used = 1;
+					unmute_all(); //MUTE CLEAR
+				} else {
+					select_accent();
+				}
+			} else {
+				if (sequencer.CLEAR) m_clear.used = 1;
+				select_instrument(d); //handles CLEAR + instrument = solo
+			}
+		}
+	}
+}
+
+static void save_scene(uint8_t n) {
+	uint16_t mask = 0;
+	for (uint8_t i = BD; i <= MA; i++) {
+		if (drum_hit[i].muted) mask |= (1u << i);
+	}
+	mute_scene[n] = mask;
+	scene_write(n);
+	clear_flash = 1;
+	clear_flash_t = ui_ticks;
+}
+
+static void recall_scene(uint8_t n) {
+	uint16_t mask = mute_scene[n];
+	if (mask == 0xFFFF) return; //never stored
+	for (uint8_t i = BD; i <= MA; i++) {
+		drum_hit[i].muted = (mask >> i) & 1;
+		drum_hit[i].solo = 0;
+	}
+}
+
+/* make sure the stored version of the current pattern is up to date before it is copied */
+static void flush_current(void) {
+	if (flag.pattern_edit) {
+		flag.pattern_edit = 0;
+		start_write_current_pattern(sequencer.current_pattern, sequencer.pattern_bank);
+		attr_queue_current();
+	}
+}
+
+static void pattern_layer_step(uint8_t k) {
+	uint8_t bank = sequencer.new_bank;
+	if (k < BASIC_RHYTHM) {
+		if (perform() && sequencer.CLEAR) { //delete (press twice)
+			m_clear.used = 1;
+			if (del_armed == k && (uint16_t)(ui_ticks - del_armed_t) < CONFIRM_TICKS) {
+				del_armed = NONE;
+				if (k == sequencer.current_pattern && bank == sequencer.pattern_bank) {
+					clear_current_pattern();
+				} else {
+					storage_queue_clear(k, bank);
+				}
+				clear_flash = 1;
+				clear_flash_t = ui_ticks;
+			} else {
+				del_armed = k;
+				del_armed_t = ui_ticks;
+			}
+		} else if (perform() && sequencer.SHIFT) { //copy: source, then target
+			m_shift.used = 1;
+			if (copy_src == NONE) {
+				copy_src = k;
+				copy_src_bank = bank;
+			} else if (copy_src == k && copy_src_bank == bank) {
+				copy_src = NONE;
+			} else {
+				if (copy_src == sequencer.current_pattern && copy_src_bank == sequencer.pattern_bank) flush_current();
+				if (storage_queue_copy(copy_src, copy_src_bank, k, bank)) {
+					if (k == sequencer.current_pattern && bank == sequencer.pattern_bank) {
+						//the playing pattern was overwritten: take the new content
+						if (sequencer.START) {
+							sequencer.new_pattern = k;
+							flag.pattern_change = 1;
+						} else {
+							pattern_load(k, bank);
+						}
+					}
+					clear_flash = 1;
+					clear_flash_t = ui_ticks;
+				}
+				copy_src = NONE;
+			}
+		} else {
+			uint16_t held = raw_steps() & 0x0FFF & ~(1u << k);
+			if (perform() && held) { //hold one pattern + press another: chain
+				uint8_t start = loop_pick(held, 0);
+				sequencer.chain_start = start;
+				sequencer.chain_end = k;
+				sequencer.chain_active = 1;
+			} else {
+				sequencer.chain_active = 0;
+				pattern_request(k, bank);
+			}
+		}
+	} else {
+		if (perform()) { //mute scenes
+			if (sequencer.SHIFT) {
+				m_shift.used = 1;
+				save_scene(k - BASIC_RHYTHM);
+			} else {
+				recall_scene(k - BASIC_RHYTHM);
+			}
+		} else { //EDIT: intro/fill patterns 13-16 can be selected for editing
+			sequencer.current_intro_fill = k;
+			sequencer.chain_active = 0;
+			pattern_request(k, bank);
+		}
+	}
+}
+
+static void edit_step_press(uint8_t k) {
+	uint8_t part = sequencer.part_editing, v = sequencer.current_variation;
+	if (k > sequencer.step_num[part]) return;
+	uint8_t on;
+	if (sequencer.current_inst == AC) {
+		on = (sequencer.pattern[v].accent[part] >> k) & 1;
+	} else {
+		on = (sequencer.pattern[v].part[part][k] >> sequencer.current_inst) & 1;
+	}
+	hs_step = k;
+	hs_was_on = on;
+	hs_adjusted = 0;
+	hs_show_odds = 0;
+	hs_seen = 0;
+	hs_t = ui_ticks;
+	if (!on) write_hit(part, k, sequencer.current_inst);
+}
+
+static void edit_step_release(void) {
+	if (hs_step == NONE) return;
+	uint8_t k = hs_step;
+	uint16_t steps_deb = deb[4] | ((uint16_t)deb[3] << 8);
+	if (steps_deb & (1u << k)) { //still held
+		hs_seen = 1;
+		return;
+	}
+	//not released yet if the debounced level has not even seen the press (very short tap: allow 50 ms)
+	if (!hs_seen && ((uint16_t)(ui_ticks - hs_t) < 5 || (raw_steps() & (1u << k)))) return;
+	hs_step = NONE;
+	if (!hs_was_on || hs_adjusted) return;
+	uint8_t part = sequencer.part_editing, v = sequencer.current_variation;
+	if (sequencer.current_inst == AC) {
+		sequencer.pattern[v].accent[part] &= ~(1u << k);
+	} else {
+		sequencer.pattern[v].part[part][k] &= ~(1u << sequencer.current_inst);
+		attr_set(&pattern_attrs, attr_key(part, v, k, sequencer.current_inst), 1, 1);
+	}
+	mark_part_edited(part);
+	update_inst_led_mask();
+}
+
+static void handle_step_keys(void) {
+	for (uint8_t k = 0; k < NUM_STEPS; k++) {
+		if (!press(k)) continue;
+		if (raw_down(BASIC_VAR_SW) && sequencer.mode != PATTERN_CLEAR) { //bank
+			m_bvar.used = 1;
+			if (k < NUM_BANKS) pattern_request(sequencer.new_pattern, k);
+			continue;
+		}
+		if (sequencer.ALT) {
+			m_alt.used = 1;
+			if (k >= BASIC_RHYTHM) { //direction
+				attr_set_direction(&pattern_attrs, k - BASIC_RHYTHM);
+				flag.pattern_edit = 1;
+			} else if (sequencer.SHIFT && !sequencer.START && IS_EDIT(sequencer.mode)) { //MIDI channel
+				m_shift.used = 1;
+				sequencer.midi_channel = k;
+				recall_dirty = 1;
+			}
+			continue;
+		}
+		if (sequencer.pattern_layer && sequencer.mode != PATTERN_CLEAR) {
+			pattern_layer_step(k);
+			continue;
+		}
+		if (IS_EDIT(sequencer.mode) || sequencer.mode == PATTERN_CLEAR) {
+			if (sequencer.START) {
+				if (sequencer.SHIFT) {
+					m_shift.used = 1;
+					update_shuffle(k);
+				} else if (sequencer.CLEAR) {
+					m_clear.used = 1;
+					if (sequencer.part_editing == SECOND) {
+						if (k == 0) flag.second_clear = 1; //CLEAR + step 1 in the 2nd part removes it
+					} else {
+						sequencer.step_num_new = k;
+						if (k != sequencer.step_num[FIRST]) {
+							flag.length_change = 1;
+							flag.pattern_edit = 1;
+						}
+					}
+				} else if (IS_EDIT(sequencer.mode)) {
+					edit_step_press(k);
+				}
+			} else {
+				if (sequencer.SHIFT) {
+					m_shift.used = 1;
+					if (sequencer.TAP_HELD && k == DIN_RESET_STEP) {
+						sequencer.din_reset_enable ^= 1;
+						recall_dirty = 1;
+					} else if (sequencer.clock_mode == DIN_SYNC_SLAVE && k < NUM_SYNC_COUNTS) {
+						clock.sync_count_index = k;
+					}
+				} else if (sequencer.CLEAR) {
+					m_clear.used = 1;
+					if (sequencer.part_editing == SECOND) {
+						if (k == 0) flag.second_clear = 1;
+						apply_length_changes();
+					} else {
+						sequencer.step_num_new = k;
+						flag.length_change = 1;
+						apply_length_changes();
+						flag.pattern_edit = 1;
+					}
+				} else {
+					if (k >= BASIC_RHYTHM) sequencer.current_intro_fill = k;
+					pattern_request(k, sequencer.new_bank);
+				}
+			}
+		} else { //PERFORM
+			if (sequencer.SHIFT) {
+				m_shift.used = 1;
+				update_shuffle(k);
+			} else if (!sequencer.START) {
+				if (k < BASIC_RHYTHM) {
+					pattern_request(k, sequencer.new_bank);
+				} else {
+					sequencer.current_intro_fill = k;
+				}
+			} else if (sequencer.step_layer == STEP_LAYER_STEPS) {
+				uint8_t part = sequencer.part_playing, v = sequencer.current_variation;
+				if (k <= sequencer.step_num[part]) {
+					if (sequencer.current_inst == AC) {
+						sequencer.pattern[v].accent[part] ^= (1u << k);
+					} else {
+						sequencer.pattern[v].part[part][k] ^= (1u << sequencer.current_inst);
+						if (!((sequencer.pattern[v].part[part][k] >> sequencer.current_inst) & 1)) {
+							attr_set(&pattern_attrs, attr_key(part, v, k, sequencer.current_inst), 1, 1);
+						}
+					}
+					mark_part_edited(part);
+				}
+			}
+			//LOOP layer: handled by the held step levels
+		}
+	}
+}
+
+static void handle_clicks(void) {
+	if (clicked(&m_shift)) {
+		if (perform() && !sequencer.pattern_layer) {
+			sequencer.step_layer ^= 1;
+			sequencer.loop_mask = 0;
+		}
+	}
+	if (clicked(&m_alt)) {
+		if (perform()) sequencer.inst_layer ^= 1;
+	}
+	if (clicked(&m_bvar)) {
+		if (sequencer.mode != PATTERN_CLEAR) {
+			sequencer.pattern_layer ^= 1;
+			copy_src = NONE;
+			del_armed = NONE;
+		}
+	}
+	if (clicked(&m_clear)) {
+		if (IS_EDIT(sequencer.mode)) {
+			if ((uint16_t)(ui_ticks - last_clear_click) < DOUBLE_CLICK_TICKS) {
+				clear_current_pattern();
+				last_clear_click = ui_ticks - DOUBLE_CLICK_TICKS; //no triple click
+			} else {
+				clear_current_instrument();
+				last_clear_click = ui_ticks;
+			}
+			clear_flash = 1;
+			clear_flash_t = ui_ticks;
+		}
+	}
+	if (!sequencer.CLEAR) clear_all_armed = 0;
+	if (del_armed != NONE && (uint16_t)(ui_ticks - del_armed_t) >= CONFIRM_TICKS) del_armed = NONE;
+}
+
+static void update_loop(void) {
+	uint16_t mask = 0;
+	if (perform() && sequencer.START && sequencer.step_layer == STEP_LAYER_LOOP && !sequencer.pattern_layer
+		&& !raw_down(BASIC_VAR_SW) && !sequencer.ALT && !sequencer.SHIFT) {
+		mask = deb[4] | ((uint16_t)deb[3] << 8);
+	}
+	if (mask && !prev_loop_mask) sequencer.loop_idx = 0;
+	prev_loop_mask = mask;
+	sequencer.loop_mask = mask;
+}
+
+static void service_storage(void) {
+	storage_service();
+	if (recall_dirty && !sequencer.START && storage_idle()) {
+		recall_dirty = 0;
+		eeprom_write_recall_data();
+	}
+}
+
+/* ---------- LEDs ---------- */
+
+static uint16_t inst_mask_for(uint8_t part) {
+	uint16_t m = 0;
+	uint8_t v = sequencer.current_variation;
+	uint8_t last = sequencer.step_num[part];
+	if (last > 15) last = 15;
+	for (uint8_t i = 0; i <= last; i++) {
+		uint8_t on = (sequencer.current_inst == AC) ? ((sequencer.pattern[v].accent[part] >> i) & 1)
+			: ((sequencer.pattern[v].part[part][i] >> sequencer.current_inst) & 1);
+		if (on) m |= (1u << i);
+	}
+	return m;
+}
+
+static void render_steps(uint8_t blink, uint8_t fast) {
+	uint16_t m = 0;
+	uint8_t run_on = sequencer.START && (clock.ppqn_counter < (clock.divider >> 1));
+	uint16_t run = run_on ? (1u << sequencer.play_step) : 0;
+	uint8_t version = sequencer.mode == PATTERN_CLEAR && sequencer.SHIFT && sequencer.TAP_HELD;
+	if (version) {
+		uint8_t v = (sequencer.version / 10) % 10;
+		if (v > 0) m = 1u << (v - 1);
+	} else if (raw_down(BASIC_VAR_SW) && sequencer.mode != PATTERN_CLEAR) {
+		m = 1u << sequencer.new_bank;
+	} else if (sequencer.ALT && sequencer.SHIFT && !sequencer.START && IS_EDIT(sequencer.mode)) {
+		m = 1u << sequencer.midi_channel;
+	} else if (sequencer.ALT) {
+		m = 1u << (BASIC_RHYTHM + attr_direction(&pattern_attrs));
+	} else if (hs_step != NONE) {
+		m = inst_mask_for(sequencer.part_editing);
+		if (fast) m ^= (1u << hs_step);
+	} else if (sequencer.SHIFT && sequencer.mode != PATTERN_CLEAR && !(sequencer.pattern_layer && perform())) {
+		if (!sequencer.START && sequencer.TAP_HELD) {
+			if (sequencer.din_reset_enable) m = 1u << DIN_RESET_STEP;
+		} else if (!sequencer.START && sequencer.clock_mode == DIN_SYNC_SLAVE) {
+			m = 1u << clock.sync_count_index;
+		} else {
+			m = 1u << sequencer.new_shuffle_amount;
+		}
+	} else if (sequencer.pattern_layer || !sequencer.START || sequencer.mode == PATTERN_CLEAR) {
+		//pattern display
+		if (sequencer.chain_active && perform()) {
+			uint8_t lo = sequencer.chain_start < sequencer.chain_end ? sequencer.chain_start : sequencer.chain_end;
+			uint8_t hi = sequencer.chain_start < sequencer.chain_end ? sequencer.chain_end : sequencer.chain_start;
+			for (uint8_t i = lo; i <= hi; i++) m |= (1u << i);
+			if (!blink) m &= ~(1u << sequencer.current_pattern);
+		} else {
+			m = 1u << sequencer.current_pattern;
+			if (sequencer.new_pattern != sequencer.current_pattern || sequencer.new_bank != sequencer.pattern_bank) {
+				if (blink) m |= 1u << sequencer.new_pattern; //pending pattern blinks
+			}
+		}
+		if (!sequencer.START && !sequencer.pattern_layer && !blink && IS_EDIT(sequencer.mode)) m &= ~(1u << sequencer.current_pattern);
+		if (perform() && !sequencer.pattern_layer) m |= (1u << sequencer.current_intro_fill);
+		if (!perform() && sequencer.pattern_layer) m |= (1u << sequencer.current_intro_fill);
+		if (copy_src != NONE && copy_src_bank == sequencer.new_bank) {
+			if (fast) m |= (1u << copy_src); else m &= ~(1u << copy_src);
+		}
+		if (del_armed != NONE) {
+			if (fast) m |= (1u << del_armed); else m &= ~(1u << del_armed);
+		}
+	} else if (IS_EDIT(sequencer.mode)) {
+		m = inst_mask_for(sequencer.part_editing);
+		if (sequencer.part_playing == sequencer.part_editing) m ^= run;
+	} else if (sequencer.step_layer == STEP_LAYER_STEPS) {
+		m = inst_mask_for(sequencer.part_playing) ^ run;
+	} else {
+		m = run | sequencer.loop_mask;
+	}
+	if (clear_flash && fast) m = 0;
+	spi_data[LATCH_1] = m;
+	spi_data[LATCH_0] = m >> 8;
+}
+
+static void render_insts(void) {
+	turn_off_all_inst_leds();
+	turn_off(LC_LED); turn_off(MC_LED); turn_off(HC_LED); turn_off(CL_LED); turn_off(MA_LED);
+	if (sequencer.mode == PATTERN_CLEAR && sequencer.SHIFT && sequencer.TAP_HELD) {
+		show_version_inst();
+		return;
+	}
+	uint8_t show_mutes_now = (perform() && sequencer.inst_layer == INST_LAYER_MUTE && !sequencer.recording) || (!perform() && sequencer.SHIFT);
+	if (show_mutes_now) {
+		for (uint8_t i = BD; i <= MA; i++) {
+			if (drum_hit[i].muted) turn_on(drum_hit[i].led_index);
+		}
+		return;
+	}
+	if (!(perform() && sequencer.recording)) {
+		if (sequencer.current_inst == AC) {
+			turn_on(ACCENT_1_LED);
+		} else {
+			turn_on(drum_hit[sequencer.current_inst].led_index);
+		}
+	}
+	for (uint8_t i = BD; i <= MA; i++) {
+		if (inst_flash_mask & (1u << i)) turn_on(drum_hit[i].led_index);
+	}
+	if (accent_flash) turn_on(ACCENT_1_LED);
+}
+
+static void render_mode_leds(uint8_t blink, uint8_t fast) {
+	uint8_t m = 0;
+	switch (sequencer.mode) {
+		case PATTERN_CLEAR: m = (clear_all_armed && fast) ? 0 : 1 << 0; break;
+		case FIRST_PART: m = 1 << 1; break;
+		case SECOND_PART: m = 1 << 2; break;
+		default: m = 1 << 3; break;
+	}
+	if (sequencer.pattern_layer) m |= 1 << 4; //PLAY LED: pattern layer
+	if (sequencer.recording && perform() && (blink || !sequencer.START)) m |= 1 << 5; //COMPOSE LED: recording
+	spi_data[LATCH_4] = (spi_data[LATCH_4] & MODE_LED_MASK) | m;
+
+	//I/F-VAR LEDs: PERFORM = instrument layer (A = MUTE, B = SELECT), EDIT = intro/fill variation
+	uint8_t b = perform() ? (sequencer.inst_layer == INST_LAYER_SELECT) : sequencer.intro_fill_var;
+	if (b) { turn_off(IF_VAR_A_LED); turn_on(IF_VAR_B_LED); } else { turn_on(IF_VAR_A_LED); turn_off(IF_VAR_B_LED); }
+
+	//part LEDs
+	uint8_t part = sequencer.START ? sequencer.part_playing : (perform() ? FIRST : sequencer.part_editing);
+	if (part == SECOND) { turn_off(FIRST_PART_LED); turn_on(SECOND_PART_LED); } else { turn_on(FIRST_PART_LED); turn_off(SECOND_PART_LED); }
+
+	//pre-scale LEDs (bits 2-5 of latch 5): pre-scale, odds/ratchet value, version
+	spi_data[LATCH_5] &= PRE_SCALE_LED_MASK;
+	if (sequencer.mode == PATTERN_CLEAR && sequencer.SHIFT && sequencer.TAP_HELD) {
+		uint8_t version = sequencer.version / 100;
+		if (version > 0 && version <= 4) spi_data[LATCH_5] |= 1 << (6 - version);
+	} else if (hs_step != NONE && sequencer.current_inst != AC) {
+		uint16_t key = attr_key(sequencer.part_editing, sequencer.current_variation, hs_step, sequencer.current_inst);
+		uint8_t n = hs_show_odds ? attr_get_odds(&pattern_attrs, key) : attr_get_ratchet(&pattern_attrs, key);
+		if (!(hs_show_odds && !blink)) spi_data[LATCH_5] |= 1 << (6 - n); //odds blink, ratchet steady
+	} else {
+		spi_data[LATCH_5] |= (1 << (sequencer.pre_scale + 2));
+	}
+}
+
+static void render(void) {
+	uint8_t blink = ((ui_ticks / 25) & 1) == 0; //250 ms
+	uint8_t fast = ((ui_ticks / 8) & 1) == 0; //80 ms
+	if (clear_flash && (uint16_t)(ui_ticks - clear_flash_t) > 30) clear_flash = 0;
+	if (perform()) sequencer.part_editing = sequencer.part_playing;
+	render_steps(blink, fast);
+	render_insts();
+	render_mode_leds(blink, fast);
+}
+
+void ui_service(void) {
+	sample_keys();
+	track_modifiers();
+	update_prescale(); //SHIFT + CLEAR (EDIT)
+	handle_mode_key();
+	handle_variation_key();
+	handle_tap();
+	handle_inst_keys();
+	handle_step_keys();
+	if (IS_EDIT(sequencer.mode)) {
+		edit_step_release();
+	} else {
+		hs_step = NONE;
+	}
+	handle_clicks();
+	if (press(IF_VAR_SW)) {} //handled as modifier / click
+	if (press(WRITE_SW)) {
+		if (IS_EDIT(sequencer.mode) && hs_step != NONE) { //held step + SHIFT: odds
+			m_shift.used = 1;
+			cycle_attr(0);
+		}
+	}
+	press(CLEAR_SW);
+	press(BASIC_VAR_B_SW);
+	update_loop();
+	service_storage();
+	render();
+}

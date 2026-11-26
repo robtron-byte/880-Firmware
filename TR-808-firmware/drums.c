@@ -11,10 +11,11 @@
 #include "spi.h"
 #include "sequencer.h"
 #include "switches.h"
+#include "hardware.h"
+#include "clock.h"
+#include "logic.h"
 
 uint8_t current_drum_hit = 0;
-uint8_t previous_assign_port = 0;
-uint8_t current_assign_port = 0;
 enum drum midi_note_queue[16] = {255};
 //volatile uint8_t trigger_finished = 1;
 
@@ -42,282 +43,119 @@ struct drum_hit drum_hit[17] = { //progmem?
 			
 };
 
-void trigger_drum(uint8_t note, uint8_t velocity) { //this needs rework to be compatible with synchronized spi updating
-		clear_all_trigs();
-		while(flag.trig_finished == 0);	//need to wait until trigger interrupt is complete before triggering new drum sound, otherwise new hits come and and 'overwrite' old hits, preventing their triggers from finishing
-		//could implement a trigger queue instead of waiting but this is really more of a concern from simultaneous drum hits coming from MIDI or live play. Sequencer triggers won't have this problem unless 
-		//individual accents are implemented for sequencer
-		
-		//midi_note_queue[note_queue_index] = note;
-		//note_queue_index++;
-		
-		current_drum_hit = note;
 
-		spi_data[drum_hit[note].spi_byte_num] |= drum_hit[note].trig_bit;
-		turn_on(drum_hit[note].led_index); 
-		//spi_data[drum_hit[note].spi_led_byte_num] |= drum_hit[note].led_bit;
-			
-		if (drum_hit[note].switch_bit != NO_SWITCH) {//need to set instrument switch
-				
-			//toggle(ACCENT_1_LED); //TODO: make this optional. It's a bit of a distracting light show, so need to be able to let user turn it off	
-			spi_data[LATCH_3] ^= (-(drum_hit[note].switch_value) ^ spi_data[LATCH_3]) & drum_hit[note].switch_bit; //this sets switch_value in spi_data byte to switch_value (0 or 1)
-					
-		}
-			
+/* instruments whose trigger LED should flash (bit per enum drum, AC = bit 16 kept separately) */
+uint16_t inst_flash_mask = 0;
+uint8_t accent_flash = 0;
+
+/* fixed trigger outputs: OUT 1 = Low Tom, OUT 2 = Low Conga (muted voices stay silent) */
+#define TRIGGER_OUT_1_DRUM LT
+#define TRIGGER_OUT_2_DRUM LC
+
+static void set_voice(uint8_t i) {
+	spi_data[drum_hit[i].spi_byte_num] |= drum_hit[i].trig_bit;
+	if (drum_hit[i].switch_bit != NO_SWITCH) { //set tom/conga or rimshot/clave switch
+		spi_data[LATCH_3] ^= (-(drum_hit[i].switch_value) ^ spi_data[LATCH_3]) & drum_hit[i].switch_bit;
+	}
+	if (i == TRIGGER_OUT_1_DRUM) TRIGGER_OUT |= (1<<TRIGGER_OUT_1);
+	if (i == TRIGGER_OUT_2_DRUM) TRIGGER_OUT |= (1<<TRIGGER_OUT_2);
+	inst_flash_mask |= (1u << i);
+}
+
+static void start_trigger_pulse(void) {
+	TIMSK0 |= (1<<OCIE0A); //enable output compare match A (turns trigger outs off)
+	TCCR0B |= (1<<CS00) | (1<<CS02); //set Timer0 clock divide to /1024
+	PORTD |= (1<<TRIG);
+}
+
+void trigger_drum(uint8_t note, uint8_t velocity) {
+		clear_all_trigs();
+		while(flag.trig_finished == 0);	//need to wait until trigger interrupt is complete before triggering new drum sound
+		current_drum_hit = note;
+		set_voice(note);
 		if (velocity > 64) {
 			spi_data[LATCH_8] |= (1<<ACCENT);
-			turn_on(ACCENT_1_LED);
-			
+			accent_flash = 1;
 		}
-		PORTD |= 1<<TRIG; 
-			
-		//update_spi(); //can't do this here, not synchronized. duh.
-			//
-		//PORTD &= ~(1<<TRIG);
-		
-		
-		//now need to set up interrupt for roughly 1 ms.  - is this necessary? common trig is not cleared in this compare match interrupt routine
-		//start timer
-		TIMSK0 |= (1<<OCIE0A); //enable output compare match A
-		TCCR0B |= (1<<CS00) | (1<<CS02); //set to /1024 of system clock start timer
+		start_trigger_pulse();
 		flag.trig_finished = 0;
 }
 
 void clear_all_trigs(void) {
-
 	spi_data[LATCH_8] = 0;
 	spi_data[LATCH_6] &= 0b11110000; //make these masks constants
 	spi_data[LATCH_7] &= 0b11011111;
-	
-	//clear trigger lines
-	//TRIGGER_OUT &= ~(1<<TRIGGER_OUT_1);
-	//TRIGGER_OUT &= ~(1<<TRIGGER_OUT_2);	
 	TRIGGER_OUT &= TRIGGER_OFF;
-	
 }
 
-void trigger_roll(void) {
-	PORTD |= (1<<TRIG);
-	uint16_t roll_modes[5] = { //these currently only apply to 4/4 timing. 
-			
-		0b0000000100000001, //2
-		0b0001000100010001, //4
-		0b0101010101010101, //8
-		0b1111111111111111, //16
-		0b1111111111111111	//32 - trigger here, plus extra trigger on half step	
-		
-	};
-	
-	if (((roll_modes[sequencer.roll_mode - 1]) & (1 << sequencer.current_step)) != 0) {
-		spi_data[drum_hit[sequencer.current_inst].spi_byte_num]  |= drum_hit[sequencer.current_inst].trig_bit;
-		if (drum_hit[sequencer.current_inst].switch_bit != NO_SWITCH) { //set instrument switch
-			
-			spi_data[LATCH_3] ^= (-(drum_hit[sequencer.current_inst].switch_value) ^ spi_data[LATCH_3]) & drum_hit[sequencer.current_inst].switch_bit;
+/* ---- ratchets ---- */
+static uint16_t ratchet_inst[3]; //instruments with 2, 3 and 4 hits on the current step
+static uint8_t ratchet_done; //bit per (n,k) pair already fired
+static uint8_t ratchet_start; //ppqn tick at which the step was triggered (shuffle)
+static uint8_t ratchet_accent;
+
+static uint8_t ratchet_bit(uint8_t n, uint8_t k) {
+	//n=2:k1 -> bit0, n=3:k1,k2 -> bit1,2, n=4:k1..k3 -> bit3..5
+	return (n == 2) ? 0 : (n == 3) ? k : (k + 2);
+}
+
+void service_ratchets(void) {
+	if (!sequencer.START || !(ratchet_inst[0] | ratchet_inst[1] | ratchet_inst[2])) return;
+	uint8_t tick = clock.ppqn_counter;
+	if (tick < ratchet_start || flag.next_step) { //next step already started: stop
+		ratchet_inst[0] = ratchet_inst[1] = ratchet_inst[2] = 0;
+		return;
+	}
+	uint8_t span = clock.divider - ratchet_start;
+	uint16_t fire = 0;
+	for (uint8_t n = 2; n <= 4; n++) {
+		if (!ratchet_inst[n - 2]) continue;
+		for (uint8_t k = 1; k < n; k++) {
+			uint8_t b = 1 << ratchet_bit(n, k);
+			if (!(ratchet_done & b) && tick >= ratchet_start + ratchet_tick(span, n, k)) {
+				ratchet_done |= b;
+				fire |= ratchet_inst[n - 2];
+			}
 		}
 	}
+	if (!fire) return;
+	clear_all_trigs();
+	for (uint8_t i = BD; i <= MA; i++) {
+		if (fire & (1u << i)) set_voice(i);
+	}
+	if (ratchet_accent) spi_data[LATCH_8] |= 1<<ACCENT;
+	start_trigger_pulse();
 }
 
-void trigger_step(uint8_t part_playing) { //trigger all drums on current step
-	//while (flag.trig_finished == 0); //wait to ensure no drums are in the midst of being triggered by external MIDI - FOR NOW SEQUENCER AND INCOMING MIDI NOTES ARE INCOMPATABLE
-	//uint8_t empty_step = 1;
-	//PORTD |= (1<<TRIG);
+void trigger_step(uint8_t part_playing) { //trigger all drums on the play step
+	uint8_t step = sequencer.play_step;
+	uint8_t var = sequencer.current_variation;
+	uint16_t data = sequencer.pattern[var].part[part_playing][step];
 	clear_all_trigs();
-	//TRIGGER_OUT &= TRIGGER_OFF;
+	ratchet_inst[0] = ratchet_inst[1] = ratchet_inst[2] = 0;
+	ratchet_done = 0;
+	ratchet_start = clock.ppqn_counter;
 	TIMSK0 |= (1<<OCIE0A); //enable output compare match A
 	TCCR0B |= (1<<CS00) | (1<<CS02); //set Timer0 clock divide to /1024
-	if (sequencer.roll_mode > NO_ROLL && !flag.half_step) trigger_roll();
-	if (sequencer.roll_mode == ROLL_32 && flag.half_step && sequencer.step_num[SECOND] == NO_STEPS) trigger_roll(); //bloody awful kludge to get rolls working when substep is triggered. bleh.
-
-	for (int i = BD; i <= MA; i++) {
-		
-		if ((sequencer.pattern[sequencer.current_variation].part[part_playing][sequencer.current_step] >> i) &1) {
-			PORTD |= (1<<TRIG);
-			if (sequencer.trigger_1 == i) TRIGGER_OUT |= (1<<TRIGGER_OUT_1); //if trigger ins enabled then need to map trigger 1 and 2 to assign 1 and assign 2 on expander
-			if (sequencer.trigger_2 == i) TRIGGER_OUT |= (1<<TRIGGER_OUT_2); 			
-			
-			if (!(drum_hit[i].muted)) {
-				if (!sequencer.SHIFT) turn_on(drum_hit[i].led_index);
-				spi_data[drum_hit[i].spi_byte_num] |= drum_hit[i].trig_bit; //maybe AND with a drum mute table here instead of checking the .muted variable of the drum struct?
-
-				if (drum_hit[i].switch_bit != NO_SWITCH) {//need to set instrument switch
-					//set n bit to x	
-					spi_data[LATCH_3] ^= (-(drum_hit[i].switch_value) ^ spi_data[LATCH_3]) & drum_hit[i].switch_bit; //this sets switch_value in spi_data byte to switch_value (0 or 1)
-
-				}		
-			}
-				
-		}
-
+	uint8_t any = 0;
+	for (uint8_t i = BD; i <= MA; i++) {
+		if (!((data >> i) & 1)) continue;
+		if (sequencer.skip_mask & (1u << i)) continue; //already played live while recording
+		if (drum_hit[i].muted) continue;
+		uint16_t key = attr_key(part_playing, var, step, i);
+		if (!odds_play(attr_get_odds(&pattern_attrs, key), sequencer.pass_count)) continue;
+		uint8_t r = attr_get_ratchet(&pattern_attrs, key);
+		if (r > 1) ratchet_inst[r - 2] |= (1u << i);
+		set_voice(i);
+		any = 1;
 	}
-	//handle accent
-	if ((sequencer.pattern[sequencer.current_variation].accent[part_playing] >> sequencer.current_step) &1) {
+	sequencer.skip_mask = 0;
+	ratchet_accent = 0;
+	if ((sequencer.pattern[var].accent[part_playing] >> step) & 1) {
 		spi_data[LATCH_8] |= 1<<ACCENT;
-		if (sequencer.trigger_1 == AC) TRIGGER_OUT |= (1<<TRIGGER_OUT_1);
-		if (sequencer.trigger_2 == AC) TRIGGER_OUT |= (1<<TRIGGER_OUT_2);
-		if (!sequencer.SHIFT) turn_on(ACCENT_1_LED);
+		accent_flash = 1;
+		ratchet_accent = 1;
+		any = 1;
 	}
-	
-	//PORTD &= ~(1<<TRIG);
-}
-
-void process_external_triggers(void) {
-	
-	//current_assign_port = PIND;
-	//current_assign_port ^= previous_assign_port;
-	//previous_assign_port ^= current_assign_port;
-	//current_assign_port &= previous_assign_port;
-	
-	clear_all_trigs();
-	
-	for (int i = BD; i <= CP; i++) {
-		if ((spi0_current_trigger_byte0 >> i) & 1) {
-			PORTD |= (1<<TRIG);	
-			if (!drum_hit[i].muted) {
-				
-				spi_data[drum_hit[i].spi_byte_num] |= drum_hit[i].trig_bit;
-				if (drum_hit[i].switch_bit != NO_SWITCH) {//need to set instrument switch
-									
-					//spi_data[LATCH_3] ^= (-(drum_hit[i].switch_value) ^ spi_data[LATCH_3]) & drum_hit[i].switch_bit; //this sets switch_value in spi_data byte to switch_value (0 or 1)
-					//but this needs to be something like:
-					//if ((current_assign_port >> ASSIGN_2) &1) {
-					if (PIND & (1<<ASSIGN_2)) {	
-						//current_assign_port ^= (1 << ASSIGN_2);
-						//spi_data[LATCH_3] |= (drum_hit[i].switch_bit);
-						spi_data[LATCH_3] ^= (-(drum_hit[i+SW_DRUM_OFFSET].switch_value) ^ spi_data[LATCH_3]) & drum_hit[i+SW_DRUM_OFFSET].switch_bit;
-						if (!sequencer.SHIFT) turn_on(drum_hit[i + SW_DRUM_OFFSET].led_index);
-					} else {
-						//spi_data[LATCH_3] &= ~(drum_hit[i].switch_bit);
-						spi_data[LATCH_3] ^= (-(drum_hit[i].switch_value) ^ spi_data[LATCH_3]) & drum_hit[i].switch_bit;
-						if (!sequencer.SHIFT) turn_on(drum_hit[i].led_index);
-					}
-				} else {
-					if (!sequencer.SHIFT) turn_on(drum_hit[i].led_index);
-					
-				}
-				
-			}
-		}
-	}
-	//bleh, exception to handle MA, 7th bit of byte0
-	if ((spi0_current_trigger_byte0 >> 7) & 1) {
-		
-		PORTD |= (1<<TRIG);
-		if (!drum_hit[MA].muted) {
-			if (!sequencer.SHIFT) turn_on(drum_hit[MA].led_index);
-			spi_data[drum_hit[MA].spi_byte_num] |= drum_hit[MA].trig_bit;
-		}
-	}
-	
-	//handle CB, CY, OH, CH
-	for (int i = CB; i <= CH; i++) {
-		if (spi0_current_trigger_byte1 >> (i - 7) & 1) {
-			PORTD |= (1<<TRIG);
-			if (!sequencer.SHIFT) turn_on(drum_hit[i].led_index);
-			spi_data[drum_hit[i].spi_byte_num] |= drum_hit[i].trig_bit;
-		}
-	
-		
-	}
-	
-	//handle accent
-	//if ((current_assign_port >> ASSIGN_1) & 1) {
-		//current_assign_port ^= (1<<ASSIGN_1);
-	if (PIND & (1<<ASSIGN_1)) {	
-		spi_data[LATCH_8] |= 1<<ACCENT;
-		if (!sequencer.SHIFT) turn_on(ACCENT_1_LED);
-	}
-}
-
-void live_hits(void) { //use switch case here you twit or for loop. duh. fix this festering piece of shit.
-	
-	//also, how to avoid double triggering?
-	
-	
-	if (button[INST_BD_2_SW].state) {
-		
-		button[INST_BD_2_SW].state ^= button[INST_BD_2_SW].state;
-		trigger_drum(BD, 0);
-	}
-	
-	if (button[INST_SD_3_SW].state) {
-		
-		button[INST_SD_3_SW].state ^= button[INST_SD_3_SW].state;
-		trigger_drum(SD,0);
-	}
-	
-	if (button[INST_LT_4_SW].state) {
-		
-		button[INST_LT_4_SW].state ^= button[INST_LT_4_SW].state;
-		if (sequencer.intro_fill_var) {
-			trigger_drum(LC, 0);
-		} else {	
-			trigger_drum(LT, 0);
-		}
-	}
-	
-	if (button[INST_MT_5_SW].state) {
-		
-		button[INST_MT_5_SW].state ^= button[INST_MT_5_SW].state;
-		if (sequencer.intro_fill_var) {
-			trigger_drum(MC, 0);
-		} else {				
-			trigger_drum(MT, 0);
-		}
-	}
-	
-	if (button[INST_HT_6_SW].state) {
-		
-		button[INST_HT_6_SW].state ^= button[INST_HT_6_SW].state;
-		if (sequencer.intro_fill_var) {
-			trigger_drum(HC, 0);
-		} else {
-			trigger_drum(HT, 0);
-		}
-	}
-	
-	if (button[INST_RS_7_SW].state) {
-		
-		button[INST_RS_7_SW].state ^= button[INST_RS_7_SW].state;
-		if (sequencer.intro_fill_var) {
-			trigger_drum(CL, 0);
-			} else {
-			trigger_drum(RS, 0);
-		}		
-	}
-	
-	if (button[INST_CP_8_SW].state) {
-		
-		button[INST_CP_8_SW].state ^= button[INST_CP_8_SW].state;
-		if (sequencer.intro_fill_var) {
-			trigger_drum(MA, 0);
-			} else {
-			trigger_drum(CP, 0);
-		}		
-		
-	}
-	
-	if (button[INST_CB_9_SW].state) {
-		
-		button[INST_CB_9_SW].state ^= button[INST_CB_9_SW].state;
-		trigger_drum(CB,0);
-	}
-	if (button[INST_CY_10_SW].state) {
-		
-		button[INST_CY_10_SW].state ^= button[INST_CY_10_SW].state;
-		trigger_drum(CY,0);
-	}
-	
-	if (button[INST_OH_11_SW].state) {
-		
-		button[INST_OH_11_SW].state ^= button[INST_OH_11_SW].state;
-		trigger_drum(OH, 0);
-	}
-	
-	if (button[INST_CH_12_SW].state) {
-		
-		button[INST_CH_12_SW].state ^= button[INST_CH_12_SW].state;
-		trigger_drum(CH,0);
-	}
-	
-	
+	if (any) PORTD |= (1<<TRIG);
 }

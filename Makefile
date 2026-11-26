@@ -26,7 +26,7 @@ OBJCOPY  := avr-objcopy
 SIZE     := avr-size
 
 SRCS := adc.c clock.c drums.c interrupts.c leds.c main.c midi.c mode.c \
-        sequencer.c spi.c switches.c twi.c twi_eeprom.c \
+        sequencer.c spi.c switches.c twi.c twi_eeprom.c logic.c ui.c \
         select_instrument_with_soloing.c \
         xnormidi-develop/bytequeue/bytequeue.c \
         xnormidi-develop/bytequeue/interrupt_setting.c \
@@ -67,7 +67,7 @@ dfp:
 
 $(BUILD)/obj/%.o: $(SRC_DIR)/%.c | $(DFP_DIR)/include/avr/iom328pb.h
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
 $(TARGET).elf: $(OBJS)
 	$(CC) $(LDFLAGS) $^ $(LDLIBS) -o $@
@@ -94,3 +94,5 @@ flash: $(TARGET).hex
 
 clean:
 	rm -rf $(BUILD)
+
+-include $(OBJS:.o=.d)

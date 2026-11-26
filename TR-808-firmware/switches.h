@@ -60,6 +60,8 @@ enum {
 #define NUM_BUTTONS	35 //use sizeof of button array to increase flexibility
 #define NUM_INST 16 //handily the number of instruments and also the offset from 0 of the INST_AC_1_SW
 
+#define BASIC_VAR_SW BASIC_VAR_A_SW
+
 struct button {
 	
 
@@ -78,37 +80,11 @@ extern uint8_t current_start_stop_tap_state;
 extern uint8_t previous_start_stop_tap_state;	
 
 void parse_switch_data(void);
-
 void check_start_stop_tap(void);
-
-void check_write_sw(void);
-
-uint8_t read_track_switches(void);
-void test_update_track_leds(void);
-
-void check_inst_switches(void);	
-
-void assign_triggers(uint8_t drum_index);
-
 void assign_mutes(uint8_t drum_index);
-
 void clear_mutes(void);
-
 void assign_solo(uint8_t drum_index);
-
 void select_instrument(uint8_t drum_index);
-
-void process_track_press(void);
-
-void check_variation_switches(void);
-
-void check_clear_switch(void);
-
-void check_intro_fill_variation_switch(void);
-
-uint8_t check_step_press(void); //return pressed step switch
-
-void clear_all_patterns(void); //reset utility to clear eeprom
-void clear_pattern_bank(uint8_t bank);
+void copy_part(uint8_t part);
 	
 #endif

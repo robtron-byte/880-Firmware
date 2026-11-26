@@ -23,6 +23,7 @@
 #include "clock.h"
 #include "adc.h"
 #include "twi_eeprom.h"
+#include "ui.h"
 #include "xnormidi-develop/midi.h"
 #include "xnormidi-develop/midi_device.h"
 #include "xnormidi-develop/bytequeue/bytequeue.h" //this is required for MIDI sending
@@ -36,49 +37,18 @@ MidiDevice midi_device;
 void refresh(void) {
 	//reset watchdog timer
 	wdt_reset();
-	//if (sequencer.SHIFT) update_tempo(); //this analog reading is noisy - need to do it less often, like maybe only when shift is pressed? //meh, doesn't seem to make a huge difference.	
 	if (clock.source == INTERNAL) {
 		update_tempo(); 	
 	}
 	check_start_stop_tap();
-	//read_switches();
 	parse_switch_data();
-	//if (sequencer.mode == MANUAL_PLAY && !sequencer.SHIFT && sequencer.live_hits) /*spi0_read_triggers();*/live_hits(); 
-	
-	if (sequencer.mode == MANUAL_PLAY) {
-		if ((!sequencer.SHIFT) && sequencer.live_hits) live_hits();
-		if (!sequencer.START && sequencer.trigger_enable) spi0_read_triggers();
-	}
-	
-	// needs to be updated to work with synchronized spi updating. to prevent double triggering maybe update less frequently?
-	//if ((sequencer.mode == PATTERN_CLEAR) && (!sequencer.START)) spi0_read_triggers();
-	check_mode_switch();
-	check_fill_switch();
-	check_clear_switch();
-	check_intro_fill_variation_switch();
-	check_variation_switches();
-	update_prescale(); //why does this need to be called constantly? At the moment, yes. But could just call when pre-scale is changed?
-//	if (sequencer.mode == PLAY_RHYTHM || sequencer.mode == COMPOSE_RHYTHM ) {
-    
-//    test_update_track_leds();
-    
-//  } else {
-	check_inst_switches();
-	update_inst_leds();	//updating too frequently? Not a functional problem yet, but unecessary overhead?
-//  }  
-	check_write_sw();
-	update_step_board();
+	ui_service(); //keys, storage, LEDs (880 Perform)
+	check_fill_switch(); //after ui_service so SHIFT/I-F VAR know a FILL press happened
 	process_step();
-	//update_spi();
+	service_ratchets();
 	spi_read_write();
 	if (sequencer.din_reset_enable) poll_din_reset();
-	write_next_pattern_page();
-	//DDRB &= ~(1<<SPI0_SCK); //float SPI0 to turn off TII LED
-	PORTD &= ~(1<<TRIG); //is trigger pulse width long enough? Could be affecting accent - need to test.
-	//PORTD |= (1<<TRIG);
-	//TRIGGER_OUT &= TRIGGER_OFF;
-	//_delay_ms(1);
-	
+	PORTD &= ~(1<<TRIG);
 }
 
 
@@ -181,7 +151,7 @@ int main(void)
 	sequencer.current_intro_fill = 12;//first of 4 intro/fill patterns
 	sequencer.fill_mode = MANUAL;
 	sequencer.pattern_bank = 0;
-	sequencer.roll_mode = 0; 
+	sequencer.rnd = 0x5A;
 	eeprom_init();
 	//flag.twi_init_error = 0;
 	
@@ -191,18 +161,13 @@ int main(void)
 	//DDRD |= 1 << PD3; //set up PD3 as output 
 	sei(); //enable global interrupts	
 
-	flag.last_pattern = 0;
 	
 	eeprom_read_recall_data();
 	//only checks for un-initialized pattern data, but does not check for un-initialized recall data, which you will get as  you add new data to recall (unitalicized as 0xFF)
 	if (sequencer.pattern_bank == 0b00001111) { //eeprom data not initialized, reset recall data
-		sequencer.current_pattern = sequencer.previous_pattern = 0;
-		sequencer.pattern_bank = sequencer.previous_bank  = 0;
+		sequencer.current_pattern = sequencer.new_pattern = 0;
+		sequencer.pattern_bank = sequencer.new_bank = 0;
 		sequencer.midi_channel = 0;
-		//set default trigger assignments:
-		sequencer.trigger_1 = AC;
-		sequencer.trigger_2 = CB;
-		sequencer.trigger_enable = 0;
 		sequencer.clock_mode = MIDI_MASTER;
 		sequencer.din_reset_enable = 0;
 		eeprom_write_recall_data();
@@ -232,12 +197,7 @@ int main(void)
 	//sequencer.trigger_1 = AC;
 	//sequencer.trigger_2 = CB;
 	
-	sequencer.live_hits = 0; //live hits disable on startup
-	sequencer.trigger_enable = 0; //disable trigger inputs on start up?
-	// THIS WAS FOR TESTING PATTERN CLEARNING. IT SEEMS TO WORK.
-	//clear_all_patterns();
-	//PORTB |= (1<<SPI_EN); //disable SPI for trigger in testing
-	sequencer.version = 115; //  BETA //0.9.8
+	sequencer.version = 116; //880 Perform, based on 1.1.5
 	
 	//flush spi0 buffer
 	

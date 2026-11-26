@@ -17,6 +17,7 @@
 #include "xnormidi-develop/midi_device.h"
 #include "xnormidi-develop/bytequeue/bytequeue.h"
 #include "midi.h"
+#include "ui.h"
 
 ISR (INT1_vect) { //handler for DIN Sync clock pulse in slave mode
 		
@@ -77,9 +78,9 @@ ISR (TIMER0_COMPA_vect) { //at the moment this timer is doing double duty as 1MS
 	
 	if (sequencer.clock_mode == MIDI_SLAVE) { //probably need to come up with a MIDI note off flag that is checked here 
 		spi_data[drum_hit[current_drum_hit].spi_byte_num] &= ~(drum_hit[current_drum_hit].trig_bit);
-		turn_off(ACCENT_1_LED);
 		spi_data[LATCH_8] &= ~(1<<ACCENT);
-		turn_off(drum_hit[current_drum_hit].led_index);
+		inst_flash_mask = 0;
+		accent_flash = 0;
 
 		//flag.trig_finished = 1;
 	}
@@ -96,8 +97,8 @@ ISR (TIMER3_COMPA_vect) {
   //flag.blink = 1;
 }
 
-ISR (TIMER4_COMPA_vect) {
-  
+ISR (TIMER4_COMPA_vect) { //10 ms UI tick
+  ui_ticks++;
   flag.blink = 1;
   
 }

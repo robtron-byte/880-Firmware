@@ -10,7 +10,9 @@
 #include <stdbool.h>
 #include <avr/pgmspace.h>
 #include <string.h>
+#include <avr/wdt.h>
 #include "sequencer.h"
+#include "clock.h"
 #include "twi_eeprom.h"
 #include "twi.h"
 #include "hardware.h"
@@ -32,19 +34,6 @@ typedef struct {
 } WRITE_PATTERN;
 
 typedef struct {
-	uint8_t				high_byte;
-	uint8_t				low_byte;
-	rhythm_track_data	rhythm_track_data;
-	} WRITE_TRACK;
-	
-typedef struct {
-	uint8_t				high_byte;
-	uint8_t				low_byte;
-	struct recall		recall_data;
-	
-	} WRITE_RECALL;	
-
-typedef struct {
 	uint8_t     high_byte;
 	uint8_t     low_byte;
 } SET_EEPROM_ADDRESS;
@@ -52,12 +41,8 @@ typedef struct {
 
 // Create structure pointers for the TWI/I2C buffer
 WRITE_PATTERN            *p_write_pattern;
-WRITE_TRACK				*p_write_track;
-WRITE_RECALL			*p_write_recall;
 SET_EEPROM_ADDRESS      *p_set_eeprom_address;
 pattern_data             *p_read_pattern;
-rhythm_track_data		 *p_read_rhythm_track_data;
-struct recall			*p_read_recall_data;
 
 // Create TWI/I2C buffer, size to largest command
 char    TWI_buffer[sizeof(WRITE_PATTERN)];
@@ -82,15 +67,27 @@ void eeprom_init(){
 	p_write_pattern = (WRITE_PATTERN *)TWI_buffer;
 	p_read_pattern = (pattern_data *)TWI_buffer;
 	
-	p_write_track = (WRITE_TRACK *)TWI_buffer;
-	p_read_rhythm_track_data = (rhythm_track_data *)TWI_buffer;
-	
 	//p_write_recall = (WRITE_RECALL *)TWI_buffer;
 	//p_read_recall_data = (recall *)TWI_buffer;
 	
 }
 
+// This code copies the current pattern to write into global memory, and then does the copy one page at a time with calls to write_next_pattern_page, which happens in the 
+// main sequencer.
+pattern_data pattern_to_write;
+#define PATTERN_PAGE_STOP_WRITING (NUM_PAGES_PATTERN + 1)
+volatile int current_pattern_page = PATTERN_PAGE_STOP_WRITING;
+int current_writing_page = -1;
+uint8_t current_pattern_num;
+uint8_t current_pattern_bank;
+
+void write_next_pattern_page();
+
 pattern_data read_pattern(uint16_t memory_address, uint8_t bank){
+	// the requested pattern may still be in the background writer: return that copy
+	if (pattern_writer_busy() && bank == current_pattern_bank && memory_address == current_pattern_num*PAGES_PER_PATTERN*PAGE_SIZE) {
+		return pattern_to_write;
+	}
 	// send 'set memory address' command to eeprom and then read data
 	while(TWI_busy);
 	memory_address = memory_address + (bank*BANK_SIZE);
@@ -108,20 +105,21 @@ pattern_data read_pattern(uint16_t memory_address, uint8_t bank){
 	return(*p_read_pattern);
 }
 
-// This code copies the current pattern to write into global memory, and then does the copy one page at a time with calls to write_next_pattern_page, which happens in the 
-// main sequencer.
-pattern_data pattern_to_write;
-#define PATTERN_PAGE_STOP_WRITING (NUM_PAGES_PATTERN + 1)
-volatile int current_pattern_page = PATTERN_PAGE_STOP_WRITING;
-int current_writing_page = -1;
-uint8_t current_pattern_num;
-uint8_t current_pattern_bank;
 
-void blocking_copy_active_pattern(uint8_t dest_pattern) {
-	pattern_data pattern_to_write;
-	copy_active_pattern_data(&pattern_to_write);
-	for (int page_num = 0; page_num <= NUM_PAGES_PATTERN; ++page_num) {
-		write_pattern_page(dest_pattern*PAGES_PER_PATTERN*PAGE_SIZE, sequencer.pattern_bank, &pattern_to_write, page_num);
+static void pager_start(uint8_t pattern_num, uint8_t pattern_bank) {
+	current_pattern_bank = pattern_bank;
+	current_pattern_num = pattern_num;
+	current_writing_page = -1;
+	current_pattern_page = 0;
+}
+
+uint8_t pattern_writer_busy(void) {
+	return current_pattern_page <= NUM_PAGES_PATTERN;
+}
+
+static void pager_flush(void) {
+	while (pattern_writer_busy()) {
+		write_next_pattern_page();
 	}
 }
 
@@ -145,13 +143,9 @@ void start_write_current_pattern(uint8_t pattern_num, uint8_t pattern_bank) {
 	*/
 	
 	//TRIGGER_OUT |= (1<<TRIGGER_OUT_2); //holy jeeze, I think I left this here just to measure pattern write times. good golly
-	current_pattern_bank = pattern_bank;
-	current_pattern_num = pattern_num;
-	
+	pager_flush(); //never overwrite the buffer while a previous pattern is still being written
 	copy_active_pattern_data(&pattern_to_write);
-	
-	current_pattern_page = 0;
-	current_writing_page = -1;
+	pager_start(pattern_num, pattern_bank);
 	//TRIGGER_OUT &= TRIGGER_OFF;
 }
 
@@ -182,64 +176,10 @@ void write_pattern_page(uint16_t memory_address, uint8_t bank, pattern_data *w_d
 	while(TWI_busy); //added by omar to protect twi buffer
 }
 
-struct rhythm_track eeprom_read_rhythm_track(uint16_t memory_address) {
-	
-
-	// send 'set memory address' command to eeprom and then read data
-	while(TWI_busy);
-	memory_address = (memory_address*TRACK_SIZE) + RHYTHM_TRACK_ADDR_OFFSET;
-	p_set_eeprom_address->high_byte = (memory_address >> 8);
-	p_set_eeprom_address->low_byte = memory_address;
-	TWI_master_start_write_then_read(   EEPROM_DEVICE_ID,               // device address of eeprom chip
-	sizeof(SET_EEPROM_ADDRESS),     // number of bytes to write
-	sizeof(rhythm_track_data)             // number of bytes to read
-	);
-		
-	// nothing else to do - wait for the data
-	while(TWI_busy);
-	// return the data
-	
-	struct rhythm_track* t = (struct rhythm_track*)p_read_rhythm_track_data;
-	
-	return(*t);
-}
-
-void eeprom_write_rhythm_track(uint16_t memory_address, rhythm_track_data *w_data) { //for the sake of speed, make this less generalized knowing that a rhythm track only takes up 1 page of eeprom data
-	while(TWI_busy);
-	// assert(sizeof(rhythm_track_data) <= PAGE_SIZE);
-	int num_pages = sizeof(rhythm_track_data) / PAGE_SIZE; //isn't this a constant? should it be defined as sizeof(pattern_data)/PAGE_SIZE?
-	memory_address = (memory_address*TRACK_SIZE) + RHYTHM_TRACK_ADDR_OFFSET;
-	//write 128 byte pages of data
-	for (int i = 0; i < num_pages; ++i) {
-		
-		p_write_pattern->high_byte = (memory_address >> 8);
-		p_write_pattern->low_byte = memory_address;
-		// this is directly putting PAGE_SIZE bytes of the input PATTERN w_data into the TWI_buffer *after* the address bytes (hence the +2)
-		// NOTE: p_write_pattern is a pointer to TWI_BUFFER
-		memcpy(TWI_buffer+2, (char *)w_data + i*PAGE_SIZE, PAGE_SIZE);
-		TWI_master_start_write(     EEPROM_DEVICE_ID,       // device address of eeprom chip
-		2 + PAGE_SIZE
-		);
-		memory_address+= PAGE_SIZE;
-		while(TWI_busy);
-	}
-	//write remaining bytes (ie. remainder of sizeof(pattern_data)/PAGE_SIZE)
-	int remaining = sizeof(rhythm_track_data) % PAGE_SIZE; //same thing here? Shouldn't this be defined as sizeof(pattern_data)%PAGE_SIZE?
-	p_write_pattern->high_byte = (memory_address >> 8);
-	p_write_pattern->low_byte = memory_address;
-	memcpy(TWI_buffer+2, (char *)w_data + num_pages*PAGE_SIZE, remaining);
-	TWI_master_start_write(     EEPROM_DEVICE_ID,       // device address of eeprom chip
-	2 + remaining
-	);
-	
-	while(TWI_busy);	
-	
-}
-
 void eeprom_read_recall_data() {
 	// send 'set memory address' command to eeprom and then read data
 	while(TWI_busy);
-	int memory_address = RECALL_ADDR_OFFSET;
+	uint16_t memory_address = RECALL_ADDR_OFFSET;
 	p_set_eeprom_address->high_byte = (memory_address >> 8);
 	p_set_eeprom_address->low_byte = memory_address;
 	TWI_master_start_write_then_read(   EEPROM_DEVICE_ID,               // device address of eeprom chip
@@ -252,12 +192,9 @@ void eeprom_read_recall_data() {
 	
 	struct recall* d = (struct recall*)p_read_pattern;
 
-	sequencer.pattern_bank =sequencer.previous_bank = d->bank;
+	sequencer.pattern_bank = sequencer.new_bank = d->bank;
 	sequencer.midi_channel = d->midi_channel;
-	sequencer.current_pattern = sequencer.previous_pattern = sequencer.new_pattern = d->pattern;
-	sequencer.trigger_1 = d->trigger_1;
-	sequencer.trigger_2 = d->trigger_2;
-	sequencer.trigger_enable = d->trigger_enable;
+	sequencer.current_pattern = sequencer.new_pattern = d->pattern;
 	sequencer.clock_mode = d->clock_mode;
 	sequencer.din_reset_enable = d->din_reset_enable;
 }
@@ -267,16 +204,13 @@ void eeprom_write_recall_data() {
 	recall_data.bank = sequencer.pattern_bank; 
 	recall_data.midi_channel = sequencer.midi_channel;
 	recall_data.pattern = sequencer.current_pattern;	
-	recall_data.trigger_1 = sequencer.trigger_1;
-	recall_data.trigger_2 = sequencer.trigger_2;
-	recall_data.trigger_enable = sequencer.trigger_enable;
 	recall_data.clock_mode = sequencer.clock_mode;
 	recall_data.din_reset_enable = sequencer.din_reset_enable;
 	// if you want to store more data, put it here
 	
 	while(TWI_busy);
 	// assert(sizeof(rhythm_track_data) <= PAGE_SIZE);
-	int memory_address = RECALL_ADDR_OFFSET;
+	uint16_t memory_address = RECALL_ADDR_OFFSET;
 	//write 128 byte pages of data
 	p_write_pattern->high_byte = (memory_address >> 8);
 	p_write_pattern->low_byte = memory_address;
@@ -300,10 +234,202 @@ void handle_TWI_result(uint8_t return_code){
 			}
 			//flag.twi_init_error = 1;
 			//turn_on(IF_VAR_B_LED);
-		} else {
-			// stop writing if there is some error
-			current_pattern_page = PATTERN_PAGE_STOP_WRITING;
 		}
+		// a NACK (EEPROM still busy with its internal write cycle) is retried by the
+		// TWI interrupt automatically, so failures are not treated as the end of the transfer
+
 	}
 }
 
+
+/* ======================================================================
+ * 880 Perform storage: attributes, reload backup, copy/clear jobs, scenes
+ * ====================================================================== */
+
+uint16_t mute_scene[NUM_SCENES];
+
+static struct attr_block attr_to_write; //snapshot for the background writer, also used as job buffer
+static uint8_t attr_write_slot;
+static uint8_t attr_write_pending = 0;
+
+enum job_type { JOB_NONE, JOB_COPY, JOB_CLEAR };
+static struct {
+	uint8_t type;
+	uint8_t stage;
+	uint8_t src_pattern, src_bank, dst_pattern, dst_bank;
+} job;
+
+uint8_t attr_slot(uint8_t pattern, uint8_t bank) {
+	if (bank == BACKUP_BANK) return ATTR_SLOT_BACKUP;
+	return bank * PATTERNS_PER_BANK + pattern;
+}
+
+static uint16_t attr_addr(uint8_t slot) {
+	return ATTR_ADDR_BASE + (uint16_t)slot * ATTR_BYTES;
+}
+
+static void eeprom_read_block_blocking(uint16_t addr, void *dst, uint8_t n) {
+	while(TWI_busy);
+	p_set_eeprom_address->high_byte = addr >> 8;
+	p_set_eeprom_address->low_byte = addr;
+	TWI_master_start_write_then_read(EEPROM_DEVICE_ID, sizeof(SET_EEPROM_ADDRESS), n);
+	while(TWI_busy);
+	memcpy(dst, TWI_buffer, n);
+}
+
+//n must not cross a 128 byte EEPROM page
+static void eeprom_write_block_blocking(uint16_t addr, const void *src, uint8_t n) {
+	while(TWI_busy);
+	p_write_pattern->high_byte = addr >> 8;
+	p_write_pattern->low_byte = addr;
+	memcpy(TWI_buffer + 2, src, n);
+	TWI_master_start_write(EEPROM_DEVICE_ID, 2 + n);
+	while(TWI_busy);
+}
+
+void attr_read(uint8_t slot, struct attr_block *a) {
+	if (attr_write_pending && slot == attr_write_slot) {
+		*a = attr_to_write; //newest data has not been written yet
+		return;
+	}
+	eeprom_read_block_blocking(attr_addr(slot), a, ATTR_BYTES);
+	attr_validate(a);
+}
+
+void attr_write(uint8_t slot, const struct attr_block *a) {
+	eeprom_write_block_blocking(attr_addr(slot), a, ATTR_BYTES);
+}
+
+void attr_queue_current(void) {
+	if (attr_write_pending && attr_write_slot != attr_slot(sequencer.current_pattern, sequencer.pattern_bank)) {
+		attr_write(attr_write_slot, &attr_to_write); //a different pattern is still queued: write it first
+	}
+	attr_to_write = pattern_attrs;
+	attr_write_slot = attr_slot(sequencer.current_pattern, sequencer.pattern_bank);
+	attr_write_pending = 1;
+}
+
+void default_pattern_data(pattern_data *p) {
+	memset(p, 0, sizeof(*p));
+	p->step_num[FIRST] = 15;
+	p->step_num[SECOND] = NO_STEPS;
+	p->pre_scale = 1; //PRE_SCALE_3
+}
+
+uint8_t storage_idle(void) {
+	return !pattern_writer_busy() && !attr_write_pending && job.type == JOB_NONE;
+}
+
+static uint8_t queue_job(uint8_t type, uint8_t sp, uint8_t sb, uint8_t dp, uint8_t db) {
+	if (job.type != JOB_NONE) return 0;
+	job.type = type;
+	job.stage = 0;
+	job.src_pattern = sp;
+	job.src_bank = sb;
+	job.dst_pattern = dp;
+	job.dst_bank = db;
+	return 1;
+}
+
+uint8_t storage_queue_copy(uint8_t src_pattern, uint8_t src_bank, uint8_t dst_pattern, uint8_t dst_bank) {
+	return queue_job(JOB_COPY, src_pattern, src_bank, dst_pattern, dst_bank);
+}
+
+uint8_t storage_queue_clear(uint8_t dst_pattern, uint8_t dst_bank) {
+	return queue_job(JOB_CLEAR, 0, 0, dst_pattern, dst_bank);
+}
+
+void storage_queue_backup(void) {
+	if (job.type != JOB_NONE) return; //a user copy/clear job has priority, skip this backup
+	queue_job(JOB_COPY, sequencer.current_pattern, sequencer.pattern_bank, BACKUP_PATTERN, BACKUP_BANK);
+}
+
+/* one EEPROM operation per call so the sequencer never stalls for long */
+void storage_service(void) {
+	if (pattern_writer_busy()) {
+		write_next_pattern_page();
+		return;
+	}
+	if (attr_write_pending) {
+		attr_write(attr_write_slot, &attr_to_write);
+		attr_write_pending = 0;
+		return;
+	}
+	if (job.type == JOB_NONE) return;
+	switch (job.stage) {
+		case 0: //pattern data into the pager buffer
+			if (job.type == JOB_COPY) {
+				pattern_to_write = read_pattern(job.src_pattern*PAGES_PER_PATTERN*PAGE_SIZE, job.src_bank);
+			} else {
+				default_pattern_data(&pattern_to_write);
+			}
+			pager_start(job.dst_pattern, job.dst_bank);
+			job.stage = 1;
+			break;
+		case 1: //pager finished (checked above): attributes
+			if (job.type == JOB_COPY) {
+				eeprom_read_block_blocking(attr_addr(attr_slot(job.src_pattern, job.src_bank)), &attr_to_write, ATTR_BYTES);
+				attr_validate(&attr_to_write);
+			} else {
+				attr_clear(&attr_to_write);
+			}
+			attr_write(attr_slot(job.dst_pattern, job.dst_bank), &attr_to_write);
+			job.type = JOB_NONE;
+			break;
+	}
+}
+
+uint8_t storage_reload(void) {
+	while (!storage_idle()) { //make sure the backup is complete
+		storage_service();
+	}
+	pattern_data p = read_pattern(BACKUP_PATTERN*PAGES_PER_PATTERN*PAGE_SIZE, BACKUP_BANK);
+	if (p.step_num[FIRST] > 15) return 0; //never written (erased EEPROM)
+	sequencer.pattern[VAR_A] = p.variation_a;
+	sequencer.pattern[VAR_B] = p.variation_b;
+	sequencer.step_num[FIRST] = p.step_num[FIRST];
+	sequencer.step_num[SECOND] = (p.step_num[SECOND] == NO_STEPS) ? NO_STEPS : p.step_num[FIRST];
+	sequencer.step_num_new = sequencer.step_num[FIRST];
+	if (p.pre_scale != sequencer.pre_scale) {
+		sequencer.pre_scale = p.pre_scale & 0x03;
+		flag.pre_scale_change = 1;
+	}
+	if (p.shuffle < SHUFFLE_MAX) {
+		sequencer.new_shuffle_amount = p.shuffle;
+		flag.shuffle_change = 1;
+	}
+	attr_read(ATTR_SLOT_BACKUP, &pattern_attrs);
+	return 1;
+}
+
+void scenes_read(void) {
+	eeprom_read_block_blocking(SCENE_ADDR, mute_scene, sizeof(mute_scene));
+}
+
+void scene_write(uint8_t scene) {
+	(void)scene;
+	eeprom_write_block_blocking(SCENE_ADDR, mute_scene, sizeof(mute_scene));
+}
+
+// This function will clear every pattern by blocking while it writes to each page. It should
+// only be run in special situations (like resetting the system).
+void clear_all_patterns(void) {
+	wdt_disable(); //disable watchdog timer when clearing all patters as it takes longer than 1 second
+	default_pattern_data(&pattern_to_write);
+	struct attr_block empty;
+	attr_clear(&empty);
+	for (uint8_t bank = 0; bank < NUM_BANKS; bank++) {
+		for (uint8_t pattern = 0; pattern < PATTERNS_PER_BANK; pattern++) {
+			for (int page_num = 0; page_num <= NUM_PAGES_PATTERN; ++page_num) {
+				write_pattern_page(pattern*PAGES_PER_PATTERN*PAGE_SIZE, bank, &pattern_to_write, page_num);
+			}
+			attr_write(attr_slot(pattern, bank), &empty);
+		}
+	}
+	attr_write(ATTR_SLOT_BACKUP, &empty);
+	sequencer.midi_channel = sequencer.current_pattern = sequencer.new_pattern = 0;
+	sequencer.pattern_bank = sequencer.new_bank = 0;
+	sequencer.clock_mode = MIDI_MASTER;
+	eeprom_write_recall_data(); //initialize recall data in eeprom
+	wdt_enable(WDTO_1S);
+}

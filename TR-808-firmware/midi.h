@@ -11,7 +11,7 @@
 #include <inttypes.h>
 #include "xnormidi-develop/midi_device.h"
 
-#define MIDI_OUTPUT_QUEUE_LENGTH 192 //does this need to be so large?
+#define MIDI_OUTPUT_QUEUE_LENGTH 64 //MIDI out only sends clock and start/stop
  
 
 extern uint8_t midi_note_number;

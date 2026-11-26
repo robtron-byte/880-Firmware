@@ -49,7 +49,7 @@ extern "C" {
 
 #include "midi_function_types.h"
 #include "bytequeue/bytequeue.h"
-#define MIDI_INPUT_QUEUE_LENGTH 192
+#define MIDI_INPUT_QUEUE_LENGTH 96
 
 typedef enum {
    IDLE, 

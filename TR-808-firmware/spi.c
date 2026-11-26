@@ -19,10 +19,6 @@ uint8_t spi_current_switch_data[5] = {0};
 uint8_t spi_previous_switch_data[5] = {0};
 uint8_t switch_states[5] = {0};
 	
-uint8_t spi0_current_trigger_byte0 = 0;
-uint8_t spi0_current_trigger_byte1 = 0;
-uint8_t spi0_previous_trigger_byte0 = 0;
-uint8_t spi0_previous_trigger_byte1 = 0;	
 	
 uint8_t spi_shift_byte(uint8_t byte) { //shifts out byte for LED data and simultaneously reads switch data
 	
@@ -31,59 +27,6 @@ uint8_t spi_shift_byte(uint8_t byte) { //shifts out byte for LED data and simult
 	return SPDR1;
 	
 }	
-
-uint8_t spi0_shift_byte(void) {
-	
-	SPDR0 = 0xFF; //MOSI is output for trigger SPI latch active LOW, so make sure it is LOW or HIGH? keep high then 
-	while (!(SPSR0 & (1<<SPIF0)));
-	return SPDR0;
-}
-
-void spi0_read_triggers() {
-
-	//setup SPI0
-	DDRB |= (1<<SPI0_SS) | (1<<SPI0_SCK) | (1<<SPI0_LATCH); //set MOSI and SS as outs (SS needs to be set as output or it breaks SPI
-	PORTB |= (1<<SPI0_SS) | (1<<SPI0_LATCH);
-	SPCR0 |= (1<<SPE0) | (1<<MSTR0); //Start SPI as MASTER
-	SPSR0 |= (1<<SPI2X); //set clock rate to XTAL/2 (8 MHz)
-	
-	//read triggers
-	
-	PORTB |= (1 << SPI0_LATCH); //latch trigger data
-	spi0_current_trigger_byte1 = ~(spi0_shift_byte()); //last byte in chain is first byte read, yeah? so byte1 is CB, CY, OH, CH
-	spi0_current_trigger_byte0 = ~(spi0_shift_byte()); //first byte in chain is last byte read, so byte0 is BD, SD, LT, MT, HT, RS, CP, MA
-	PORTB &= ~(1<<SPI0_LATCH); //latch next set of bits. this is kind of funny, first line ensures line is high, data is read and then this line latches for the next read, right?
-	//disable SPI0
-	SPCR0 &= ~(1<<SPE0);
-	DDRB &= ~(1<<SPI0_SS); //need to set PB2 back to input for TAP input
-	DDRB &= ~(1<<SPI0_SCK); //float SPI0 SCK to turn off TII LED
-	//if (flag.purge_trigger_buffer == 1) {
-		//spi0_current_trigger_byte0 = 0;
-		//spi0_current_trigger_byte1 = 0;
-		//flag.purge_trigger_buffer = 0;
-		//return;
-			//
-	//}
-	//debounce trigger data
-	spi0_current_trigger_byte0 ^= spi0_previous_trigger_byte0;
-	spi0_current_trigger_byte1 ^= spi0_previous_trigger_byte1;
-	
-	spi0_previous_trigger_byte0 ^= spi0_current_trigger_byte0;
-	spi0_previous_trigger_byte1 ^= spi0_current_trigger_byte1;
-	
-	spi0_current_trigger_byte0 &= spi0_previous_trigger_byte0;
-	spi0_current_trigger_byte1 &= spi0_previous_trigger_byte1;	
-	
-	//parse trigger data
-	//ok, so try using something like trigger_step here. this way simultaneously arriving triggers will be processed and sound at the same time.
-	if ((spi0_current_trigger_byte0) || (spi0_current_trigger_byte1)) process_external_triggers();
-	//if ((spi0_current_trigger_byte0 >> BD) & 1) {
-		////need to XOR individual bits
-		//spi0_current_trigger_byte0 ^= (1<< BD);
-		//trigger_drum(BD, 0);	
-	//}
-	 
-}
 
 void spi_read_write(void) {
 	
@@ -110,14 +53,6 @@ void spi_read_write(void) {
 	sequencer.ALT = ((spi_current_switch_data[0] >> ALT_BIT) & 1);
 	sequencer.CLEAR = ((spi_current_switch_data[2] >> CLEAR_BIT) & 1);
 	
-	if (flag.shift_lock) {
-		blink(ACCENT_1_LED, BLINK_SLOW);
-		sequencer.SHIFT = 1; //SHIFT always set when shift lock is on		
-		
-		
-	} else {
-		//stop_blink(ACCENT_1_LED);
-	}
 
 	//now process switch data, but this may be happening too fast for effective debouncing - maybe handle this in another function that runs less frequently?	
 	//debounce
