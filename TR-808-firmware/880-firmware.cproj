@@ -187,6 +187,18 @@
     <Compile Include="leds.c">
       <SubType>compile</SubType>
     </Compile>
+    <Compile Include="logic.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="logic.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="ui.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="ui.h">
+      <SubType>compile</SubType>
+    </Compile>
     <Compile Include="main.c">
       <SubType>compile</SubType>
     </Compile>

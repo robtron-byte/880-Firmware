@@ -314,8 +314,11 @@ void default_pattern_data(pattern_data *p) {
 	p->pre_scale = 1; //PRE_SCALE_3
 }
 
+/* the reload backup is only used when it belongs to the pattern that is current */
+static uint8_t backup_valid = 0, backup_wanted = 0, backup_pattern, backup_bank;
+
 uint8_t storage_idle(void) {
-	return !pattern_writer_busy() && !attr_write_pending && job.type == JOB_NONE;
+	return !pattern_writer_busy() && !attr_write_pending && job.type == JOB_NONE && !backup_wanted;
 }
 
 static uint8_t queue_job(uint8_t type, uint8_t sp, uint8_t sb, uint8_t dp, uint8_t db) {
@@ -337,8 +340,6 @@ uint8_t storage_queue_clear(uint8_t dst_pattern, uint8_t dst_bank) {
 	return queue_job(JOB_CLEAR, 0, 0, dst_pattern, dst_bank);
 }
 
-/* the reload backup is only used when it belongs to the pattern that is current */
-static uint8_t backup_valid = 0, backup_wanted = 0, backup_pattern, backup_bank;
 
 void storage_queue_backup(void) {
 	backup_valid = 0;

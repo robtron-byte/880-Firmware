@@ -140,6 +140,13 @@ void process_tick(void) {
 
 
 uint8_t reload_pending = 0;
+uint8_t discard_edits = 0; //current pattern is being overwritten by a copy: do not write RAM back
+uint8_t fill_active = 0; //a fill or intro is playing instead of the basic pattern
+uint8_t fill_from_pattern, fill_from_bank; //basic pattern to return to
+
+static uint8_t is_fill_return(uint8_t p, uint8_t b) {
+	return fill_active && p == fill_from_pattern && b == fill_from_bank;
+}
 uint8_t recall_dirty = 0;
 void pattern_take(uint8_t pattern_num, uint8_t pattern_bank, uint8_t backup);
 void apply_length_changes(void);
@@ -231,6 +238,10 @@ void process_stop(void) {
 		flag.pattern_change = 0;
 		inst_flash_mask = 0;
 		//apply pending measure-end changes now
+		if (discard_edits) {
+			discard_edits = 0;
+			flag.pattern_edit = 0;
+		}
 		if (flag.second_clear || flag.length_change) apply_length_changes();
 		//return to the selected pattern (a fill or intro may be playing) and apply a pending pattern/bank change
 		if (sequencer.mode == MANUAL_PLAY || sequencer.new_pattern != sequencer.current_pattern || sequencer.new_bank != sequencer.pattern_bank) {
@@ -238,6 +249,7 @@ void process_stop(void) {
 		} else if (flag.pattern_edit) {
 			flag.pattern_edit = 0;
 			start_write_current_pattern(sequencer.current_pattern, sequencer.pattern_bank);
+			attr_queue_current();
 		}
 		if (clock.source == INTERNAL) {
 			PORTD &= ~(1 << DIN_RUN_STOP);
@@ -257,10 +269,17 @@ void update_fill(void) {
 		sequencer.current_measure_auto_fill = 0;
 		flag.fill = 0;
 		flag.pre_scale_change = 1;
+		if (!fill_active) {
+			fill_from_pattern = sequencer.current_pattern;
+			fill_from_bank = sequencer.pattern_bank;
+		}
 		read_next_pattern(sequencer.current_intro_fill, sequencer.pattern_bank);
+		fill_active = 1;
 		sequencer.part_playing = FIRST;
-		sequencer.new_pattern = sequencer.current_pattern;
-		sequencer.new_bank = sequencer.pattern_bank;
+		if (!flag.pattern_change) { //a pattern chosen for the next measure stays chosen
+			sequencer.new_pattern = fill_from_pattern;
+			sequencer.new_bank = fill_from_bank;
+		}
 		sequencer.current_pattern = sequencer.current_intro_fill;
 		sequencer.basic_variation = sequencer.current_variation; //store current variation
 		sequencer.current_variation = sequencer.intro_fill_var;
@@ -286,7 +305,7 @@ static void update_pattern(void) {
 	if (flag.pattern_change) {
 		flag.pattern_change = 0;
 		flag.pre_scale_change = 1; //need to handle any change in pre-scale
-		uint8_t fill_return = (sequencer.current_pattern == sequencer.current_intro_fill) && sequencer.mode == MANUAL_PLAY;
+		uint8_t fill_return = is_fill_return(sequencer.new_pattern, sequencer.new_bank);
 		pattern_take(sequencer.new_pattern, sequencer.new_bank, !fill_return);
 		if (!fill_return) {
 			//reset A/B variation when a pattern changes
@@ -315,11 +334,17 @@ void apply_length_changes(void) {
 		attr_remove_part(&pattern_attrs, SECOND);
 		sequencer.second_untouched = 0;
 		if (sequencer.part_playing == SECOND) sequencer.part_playing = FIRST;
+		if (sequencer.mode == SECOND_PART) { //the edited part is gone: back to the 1st part
+			sequencer.mode = FIRST_PART;
+			sequencer.part_editing = FIRST;
+		}
+		flag.pattern_edit = 1;
 	}
 	if (flag.length_change) {
 		flag.length_change = 0;
 		sequencer.step_num[FIRST] = sequencer.step_num_new;
 		if (sequencer.step_num[SECOND] != NO_STEPS) sequencer.step_num[SECOND] = sequencer.step_num_new;
+		flag.pattern_edit = 1;
 	}
 	update_inst_led_mask();
 }
@@ -328,20 +353,25 @@ void process_new_measure(void) {
 
 	sequencer.current_step = 0;
 	sequencer.loop_idx = 0;
-	if (flag.second_clear || flag.length_change) {
-		apply_length_changes();
-		flag.pattern_edit = 1;
+	if (discard_edits) { //a copy onto this pattern is about to be loaded
+		discard_edits = 0;
+		flag.pattern_edit = 0;
+		flag.length_change = 0;
+		flag.second_clear = 0;
 	}
+	if (reload_pending && storage_idle()) { //otherwise try again at the next measure (never block the downbeat)
+		reload_pending = 0;
+		if (storage_reload()) {
+			flag.pattern_edit = 1; //store the restored pattern
+			flag.length_change = 0;
+			flag.second_clear = 0;
+		}
+	}
+	if (flag.second_clear || flag.length_change) apply_length_changes();
 	if (flag.pattern_edit == 1) {
 		flag.pattern_edit = 0;
 		start_write_current_pattern(sequencer.current_pattern, sequencer.pattern_bank); //save changed pattern at end of measure
 		attr_queue_current();
-	}
-	if (reload_pending) {
-		reload_pending = 0;
-		if (storage_reload()) {
-			flag.pattern_edit = 1; //store the restored pattern at the end of the next measure
-		}
 	}
 
 	if (sequencer.step_num[SECOND] != NO_STEPS) { //two parts: toggle part playing
@@ -504,6 +534,8 @@ void pattern_take(uint8_t pattern_num, uint8_t pattern_bank, uint8_t backup) {
 	read_next_pattern(pattern_num, pattern_bank);
 	sequencer.current_pattern = sequencer.new_pattern = pattern_num;
 	sequencer.pattern_bank = sequencer.new_bank = pattern_bank;
+	fill_active = 0;
+	flag.intro = 0;
 	if (sequencer.mode == SECOND_PART) second_part_autocopy(); //still editing the 2nd part
 	if (changed && backup) {
 		storage_queue_backup(); //for reload
@@ -518,7 +550,7 @@ void pattern_load(uint8_t pattern_num, uint8_t pattern_bank) {
 		start_write_current_pattern(sequencer.current_pattern, sequencer.pattern_bank);
 		attr_queue_current();
 	}
-	pattern_take(pattern_num, pattern_bank, 1);
+	pattern_take(pattern_num, pattern_bank, !is_fill_return(pattern_num, pattern_bank));
 	sequencer.part_playing = FIRST;
 	sequencer.current_step = 0;
 	clock.ppqn_counter = 0; //there's a glitch when switching to new patterns that can somehow cause overflow and next_step and half_step flags aren't set

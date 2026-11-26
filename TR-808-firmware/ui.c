@@ -21,6 +21,7 @@
  *            SHIFT + source, SHIFT + target = copy, CLEAR + pattern twice = delete
  */
 #include <avr/io.h>
+#include <util/atomic.h>
 #include <string.h>
 #include "ui.h"
 #include "hardware.h"
@@ -40,6 +41,7 @@
 #define CONFIRM_TICKS 200 //second press to confirm a delete within 2 s
 
 volatile uint16_t ui_ticks = 0;
+static uint16_t now_t; //ui_ticks read once (atomically) per ui_service
 
 /* ---------- debounced key levels (sampled every 10 ms) ---------- */
 static uint8_t deb[5], sample_prev[5], deb_prev[5];
@@ -104,7 +106,7 @@ static uint8_t any_other_key_down(uint8_t self) {
 }
 
 static void sample_keys(void) {
-	uint16_t now = ui_ticks;
+	uint16_t now = now_t;
 	if (now == last_sample_tick) {
 		memcpy(deb_prev, deb, 5); //no new sample: no edges
 		return;
@@ -129,7 +131,7 @@ static void track_modifiers(void) {
 		uint8_t d = deb_down(m->btn);
 		if (d && !m->down) {
 			m->down = 1;
-			m->t_down = ui_ticks;
+			m->t_down = now_t;
 			m->used = any_other_key_down(m->btn);
 		} else if (d && any_press && !button[m->btn].state) {
 			m->used = 1;
@@ -140,13 +142,14 @@ static void track_modifiers(void) {
 static uint8_t clicked(struct modkey *m) {
 	if (m->down && deb_released(m->btn)) {
 		m->down = 0;
-		return !m->used && (uint16_t)(ui_ticks - m->t_down) < CLICK_MAX_TICKS;
+		return !m->used && (uint16_t)(now_t - m->t_down) < CLICK_MAX_TICKS;
 	}
 	if (!deb_down(m->btn)) m->down = 0;
 	return 0;
 }
 
 /* ---------- helpers ---------- */
+static void flush_current(void);
 static uint8_t perform(void) { return sequencer.mode == MANUAL_PLAY; }
 
 static void mute_toggle(uint8_t d) {
@@ -272,7 +275,7 @@ static void do_reload(void) {
 		update_inst_led_mask();
 	}
 	clear_flash = 1;
-	clear_flash_t = ui_ticks;
+	clear_flash_t = now_t;
 }
 
 /* ---------- key handlers ---------- */
@@ -316,7 +319,7 @@ static void cycle_attr(uint8_t ratchet) {
 		mark_part_edited(part);
 	} else {
 		clear_flash = 1; //list full: flash
-		clear_flash_t = ui_ticks;
+		clear_flash_t = now_t;
 	}
 	hs_adjusted = 1;
 	hs_show_odds = !ratchet;
@@ -340,13 +343,14 @@ static void handle_tap(void) {
 			m_clear.used = 1;
 			if (sequencer.START) {
 				clear_all_armed = 0; //only when stopped
-			} else if (clear_all_armed && (uint16_t)(ui_ticks - clear_all_t) < CONFIRM_TICKS) {
+			} else if (clear_all_armed && (uint16_t)(now_t - clear_all_t) < CONFIRM_TICKS) {
 				clear_all_armed = 0;
 				clear_all_patterns();
 				read_next_pattern(sequencer.current_pattern, sequencer.pattern_bank);
+				storage_queue_backup(); //the old backup must not come back
 			} else {
 				clear_all_armed = 1;
-				clear_all_t = ui_ticks;
+				clear_all_t = now_t;
 			}
 		}
 	} else if (IS_EDIT(sequencer.mode)) {
@@ -359,14 +363,18 @@ static void handle_tap(void) {
 		if (sequencer.START) {
 			flag.fill = 1; //fill in the next measure
 		} else { //stopped: toggle intro
-			flag.intro ^= 1;
-			if (flag.intro) {
+			if (!flag.intro) {
+				flush_current();
+				fill_from_pattern = sequencer.current_pattern;
+				fill_from_bank = sequencer.pattern_bank;
 				read_next_pattern(sequencer.current_intro_fill, sequencer.pattern_bank);
-				sequencer.new_pattern = sequencer.current_pattern;
+				sequencer.new_pattern = fill_from_pattern;
+				sequencer.new_bank = fill_from_bank;
 				sequencer.current_pattern = sequencer.current_intro_fill;
+				fill_active = 1;
+				flag.intro = 1;
 			} else {
-				sequencer.current_pattern = sequencer.new_pattern;
-				read_next_pattern(sequencer.current_pattern, sequencer.pattern_bank);
+				pattern_load(fill_from_pattern, fill_from_bank); //back to the basic rhythm (clears the intro)
 			}
 		}
 	}
@@ -452,7 +460,7 @@ static void save_scene(uint8_t n) {
 	mute_scene[n] = mask;
 	scene_write(n);
 	clear_flash = 1;
-	clear_flash_t = ui_ticks;
+	clear_flash_t = now_t;
 }
 
 static void recall_scene(uint8_t n) {
@@ -478,7 +486,7 @@ static void pattern_layer_step(uint8_t k) {
 	if (k < BASIC_RHYTHM) {
 		if (perform() && sequencer.CLEAR) { //delete (press twice)
 			m_clear.used = 1;
-			if (del_armed == k && (uint16_t)(ui_ticks - del_armed_t) < CONFIRM_TICKS) {
+			if (del_armed == k && (uint16_t)(now_t - del_armed_t) < CONFIRM_TICKS) {
 				del_armed = NONE;
 				if (k == sequencer.current_pattern && bank == sequencer.pattern_bank) {
 					clear_current_pattern();
@@ -486,10 +494,10 @@ static void pattern_layer_step(uint8_t k) {
 					storage_queue_clear(k, bank);
 				}
 				clear_flash = 1;
-				clear_flash_t = ui_ticks;
+				clear_flash_t = now_t;
 			} else {
 				del_armed = k;
-				del_armed_t = ui_ticks;
+				del_armed_t = now_t;
 			}
 		} else if (perform() && sequencer.SHIFT) { //copy: source, then target
 			m_shift.used = 1;
@@ -507,6 +515,7 @@ static void pattern_layer_step(uint8_t k) {
 						flag.length_change = 0;
 						flag.second_clear = 0;
 						if (sequencer.START) {
+							discard_edits = 1; //edits until the measure end are dropped too
 							sequencer.new_pattern = k;
 							flag.pattern_change = 1;
 						} else {
@@ -514,7 +523,7 @@ static void pattern_layer_step(uint8_t k) {
 						}
 					}
 					clear_flash = 1;
-					clear_flash_t = ui_ticks;
+					clear_flash_t = now_t;
 				}
 				copy_src = NONE;
 			}
@@ -548,7 +557,7 @@ static void pattern_layer_step(uint8_t k) {
 
 static void edit_step_press(uint8_t k) {
 	uint8_t part = sequencer.part_editing, v = sequencer.current_variation;
-	if (k > sequencer.step_num[part]) return;
+	if (sequencer.step_num[part] > 15 || k > sequencer.step_num[part]) return;
 	uint8_t on;
 	if (sequencer.current_inst == AC) {
 		on = (sequencer.pattern[v].accent[part] >> k) & 1;
@@ -560,7 +569,7 @@ static void edit_step_press(uint8_t k) {
 	hs_adjusted = 0;
 	hs_show_odds = 0;
 	hs_seen = 0;
-	hs_t = ui_ticks;
+	hs_t = now_t;
 	if (!on) write_hit(part, k, sequencer.current_inst);
 }
 
@@ -573,7 +582,7 @@ static void edit_step_release(void) {
 		return;
 	}
 	//not released yet if the debounced level has not even seen the press (very short tap: allow 50 ms)
-	if (!hs_seen && ((uint16_t)(ui_ticks - hs_t) < 5 || (raw_steps() & (1u << k)))) return;
+	if (!hs_seen && ((uint16_t)(now_t - hs_t) < 5 || (raw_steps() & (1u << k)))) return;
 	hs_step = NONE;
 	if (!hs_was_on || hs_adjusted) return;
 	uint8_t part = sequencer.part_editing, v = sequencer.current_variation;
@@ -693,7 +702,7 @@ static void handle_shift_clear(void) {
 	if (!IS_EDIT(sequencer.mode)) return;
 	copy_variation_a_to_b();
 	clear_flash = 1;
-	clear_flash_t = ui_ticks;
+	clear_flash_t = now_t;
 }
 
 static void handle_clicks(void) {
@@ -715,19 +724,19 @@ static void handle_clicks(void) {
 	}
 	if (clicked(&m_clear)) {
 		if (IS_EDIT(sequencer.mode)) {
-			if ((uint16_t)(ui_ticks - last_clear_click) < DOUBLE_CLICK_TICKS) {
+			if ((uint16_t)(now_t - last_clear_click) < DOUBLE_CLICK_TICKS) {
 				clear_current_pattern();
-				last_clear_click = ui_ticks - DOUBLE_CLICK_TICKS; //no triple click
+				last_clear_click = now_t - DOUBLE_CLICK_TICKS; //no triple click
 			} else {
 				clear_current_instrument();
-				last_clear_click = ui_ticks;
+				last_clear_click = now_t;
 			}
 			clear_flash = 1;
-			clear_flash_t = ui_ticks;
+			clear_flash_t = now_t;
 		}
 	}
 	if (!sequencer.CLEAR) clear_all_armed = 0;
-	if (del_armed != NONE && (uint16_t)(ui_ticks - del_armed_t) >= CONFIRM_TICKS) del_armed = NONE;
+	if (del_armed != NONE && (uint16_t)(now_t - del_armed_t) >= CONFIRM_TICKS) del_armed = NONE;
 }
 
 static void update_loop(void) {
@@ -891,9 +900,9 @@ static void render_mode_leds(uint8_t blink, uint8_t fast) {
 }
 
 static void render(void) {
-	uint8_t blink = ((ui_ticks / 25) & 1) == 0; //250 ms
-	uint8_t fast = ((ui_ticks / 8) & 1) == 0; //80 ms
-	if (clear_flash && (uint16_t)(ui_ticks - clear_flash_t) > 30) clear_flash = 0;
+	uint8_t blink = ((now_t / 25) & 1) == 0; //250 ms
+	uint8_t fast = ((now_t / 8) & 1) == 0; //80 ms
+	if (clear_flash && (uint16_t)(now_t - clear_flash_t) > 30) clear_flash = 0;
 	if (perform()) sequencer.part_editing = sequencer.part_playing;
 	render_steps(blink, fast);
 	render_insts();
@@ -901,6 +910,9 @@ static void render(void) {
 }
 
 void ui_service(void) {
+	ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+		now_t = ui_ticks;
+	}
 	sample_keys();
 	track_modifiers();
 	handle_shift_clear();

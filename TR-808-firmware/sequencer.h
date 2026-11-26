@@ -158,6 +158,9 @@ extern volatile struct flag flag;
 extern struct attr_block pattern_attrs; //odds/ratchets/direction of the pattern in RAM
 extern uint8_t pre_scale[4];
 extern uint8_t reload_pending; //SHIFT + TAP while running: reload at the end of the measure
+extern uint8_t discard_edits; //copy onto the current pattern pending: drop RAM edits at the measure end
+extern uint8_t fill_active;
+extern uint8_t fill_from_pattern, fill_from_bank;
 extern uint8_t recall_dirty; //last pattern/bank must be stored in the recall data
 
 void update_tempo(void);
