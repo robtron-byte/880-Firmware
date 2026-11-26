@@ -417,10 +417,6 @@ uint8_t storage_reload(void) {
 	sequencer.step_num[FIRST] = p.step_num[FIRST];
 	sequencer.step_num[SECOND] = (p.step_num[SECOND] == NO_STEPS) ? NO_STEPS : p.step_num[FIRST];
 	sequencer.step_num_new = sequencer.step_num[FIRST];
-	if (p.pre_scale != sequencer.pre_scale) {
-		sequencer.pre_scale = p.pre_scale & 0x03;
-		flag.pre_scale_change = 1;
-	}
 	if (p.shuffle < SHUFFLE_MAX) {
 		sequencer.new_shuffle_amount = p.shuffle;
 		flag.shuffle_change = 1;

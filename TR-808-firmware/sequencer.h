@@ -166,7 +166,6 @@ void process_step(void);
 void process_start(void);
 void process_stop(void);
 void process_new_measure(void);
-void update_prescale(void);
 void update_fill(void);
 void update_shuffle(uint8_t shuffle_amount);
 void toggle_variation(void);

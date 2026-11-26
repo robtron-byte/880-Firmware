@@ -5,7 +5,7 @@ Rückweg jederzeit: [Original-Firmware aufspielen](UPDATE-ANLEITUNG.md#wenn-etwa
 
 ## A. Grundfunktionen (vor allem anderen)
 - [ ] A1 Nach dem Update sind deine Patterns noch da (einige Patterns in verschiedenen Banks anhören).
-- [ ] A2 START/STOP, Tempo-Regler, Pre-Scale (SHIFT + CLEAR) funktionieren wie gewohnt.
+- [ ] A2 START/STOP und Tempo-Regler funktionieren wie gewohnt, alle Patterns laufen in 16teln (Pre-Scale fest).
 - [ ] A3 Sync: MIDI Master (MIDI-Clock raus), MIDI Slave, DIN-Sync Master/Slave – so wie du es nutzt.
 - [ ] A4 Shuffle (SHIFT + Step 1–6) und Variation A/AB/B (SHIFT + BASIC-VAR).
 - [ ] A5 Aus- und wieder einschalten: letztes Pattern/Bank wird wieder geladen.

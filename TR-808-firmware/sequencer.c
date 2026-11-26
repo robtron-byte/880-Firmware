@@ -457,17 +457,6 @@ void update_shuffle(uint8_t shuffle_amount) {
 	}
 }
 
-void update_prescale(void) { //SHIFT + CLEAR in EDIT cycles the pre-scale
-	if (button[CLEAR_SW].state && sequencer.SHIFT && IS_EDIT(sequencer.mode)) {
-		button[CLEAR_SW].state = 0;
-		if (sequencer.pre_scale-- == 0) { //decrement to go from 3 to 4 to 1 to 2 to 3...
-			sequencer.pre_scale = NUM_PRE_SCALES -1;
-		}
-		flag.pre_scale_change = flag.pattern_edit = 1;
-		//don't change clock divider here - can cause ppqn overflow, so only change divider on ppqn match event
-	}
-}
-
 void toggle_variation(void) {
 	if (flag.variation_change == 1) {
 		flag.variation_change = 0;
@@ -496,7 +485,7 @@ void read_next_pattern(uint8_t pattern_num, uint8_t pattern_bank) {
 	sequencer.step_num[FIRST] = next_pattern.step_num[FIRST];
 	//2nd part is always as long as the 1st part (older patterns may store a different length)
 	sequencer.step_num[SECOND] = (next_pattern.step_num[SECOND] == NO_STEPS) ? NO_STEPS : next_pattern.step_num[FIRST];
-	sequencer.pre_scale = next_pattern.pre_scale & 0x03;
+	sequencer.pre_scale = 1; //880 Perform: fixed resolution (PRE-SCALE 3, 16ths in 4/4)
 	clock.divider = pre_scale[sequencer.pre_scale];
 	if (next_pattern.shuffle >= SHUFFLE_MAX) next_pattern.shuffle = 0; //pre-shuffle storage patterns
 	sequencer.new_shuffle_amount = next_pattern.shuffle;

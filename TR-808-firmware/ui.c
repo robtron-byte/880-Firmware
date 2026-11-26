@@ -11,6 +11,7 @@
  *   SHIFT + BASIC-VARIATION variation A -> AB -> B
  *   I/F-VAR + step 13-16    direction forward / reverse / ping-pong / random
  *   SHIFT + TAP             reload the pattern as it was when it was selected
+ *   (pre-scale is fixed to PRE-SCALE 3)
  *   EDIT:    steps set/clear, held step + TAP = ratchet, held step + SHIFT = odds,
  *            TAP = tap write, CLEAR click = clear instrument, double click = clear pattern
  *   PERFORM: I/F-VAR click = instrument keys MUTE <-> SELECT, SHIFT click = step keys STEPS <-> LOOP,
@@ -866,9 +867,7 @@ static void render_mode_leds(uint8_t blink, uint8_t fast) {
 		uint16_t key = attr_key(sequencer.part_editing, sequencer.current_variation, hs_step, sequencer.current_inst);
 		uint8_t n = hs_show_odds ? attr_get_odds(&pattern_attrs, key) : attr_get_ratchet(&pattern_attrs, key);
 		if (!(hs_show_odds && !blink)) spi_data[LATCH_5] |= 1 << (6 - n); //odds blink, ratchet steady
-	} else {
-		spi_data[LATCH_5] |= (1 << (sequencer.pre_scale + 2));
-	}
+	} //otherwise off: the resolution is fixed
 }
 
 static void render(void) {
@@ -884,7 +883,6 @@ static void render(void) {
 void ui_service(void) {
 	sample_keys();
 	track_modifiers();
-	update_prescale(); //SHIFT + CLEAR (EDIT)
 	handle_mode_key();
 	handle_variation_key();
 	handle_tap();
