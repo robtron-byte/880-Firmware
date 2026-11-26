@@ -8,3 +8,4 @@ TR-808-firmware/i2c_eeprom.c
 # Linux build (Makefile)
 build/
 tools/ATmega_DFP/
+__pycache__/
