@@ -52,7 +52,7 @@ typedef struct {
 extern uint16_t mute_scene[NUM_SCENES];
 
 void eeprom_init();
-pattern_data read_pattern(uint16_t memory_address, uint8_t bank);
+void read_pattern_into(pattern_data *out, uint16_t memory_address, uint8_t bank);
 void start_write_current_pattern(uint8_t pattern_num, uint8_t pattern_bank);
 void write_next_pattern_page();
 void write_pattern_page(uint16_t memory_address, uint8_t bank, pattern_data *w_data, int page_number);

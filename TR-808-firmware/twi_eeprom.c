@@ -83,10 +83,12 @@ uint8_t current_pattern_bank;
 
 void write_next_pattern_page();
 
-pattern_data read_pattern(uint16_t memory_address, uint8_t bank){
+/* read a pattern into *out (by pointer: pattern_data is 140 bytes, keep it off the stack) */
+void read_pattern_into(pattern_data *out, uint16_t memory_address, uint8_t bank){
 	// the requested pattern may still be in the background writer: return that copy
 	if (pattern_writer_busy() && bank == current_pattern_bank && memory_address == current_pattern_num*PAGES_PER_PATTERN*PAGE_SIZE) {
-		return pattern_to_write;
+		if (out != &pattern_to_write) *out = pattern_to_write;
+		return;
 	}
 	// send 'set memory address' command to eeprom and then read data
 	while(TWI_busy);
@@ -97,14 +99,10 @@ pattern_data read_pattern(uint16_t memory_address, uint8_t bank){
 	sizeof(SET_EEPROM_ADDRESS),     // number of bytes to write
 	sizeof(pattern_data)             // number of bytes to read
 	);
-	
 	// nothing else to do - wait for the data
 	while(TWI_busy);
-	// return the data
-
-	return(*p_read_pattern);
+	memcpy(out, TWI_buffer, sizeof(pattern_data));
 }
-
 
 static void pager_start(uint8_t pattern_num, uint8_t pattern_bank) {
 	current_pattern_bank = pattern_bank;
@@ -339,9 +337,25 @@ uint8_t storage_queue_clear(uint8_t dst_pattern, uint8_t dst_bank) {
 	return queue_job(JOB_CLEAR, 0, 0, dst_pattern, dst_bank);
 }
 
+/* the reload backup is only used when it belongs to the pattern that is current */
+static uint8_t backup_valid = 0, backup_wanted = 0, backup_pattern, backup_bank;
+
 void storage_queue_backup(void) {
-	if (job.type != JOB_NONE) return; //a user copy/clear job has priority, skip this backup
-	queue_job(JOB_COPY, sequencer.current_pattern, sequencer.pattern_bank, BACKUP_PATTERN, BACKUP_BANK);
+	backup_valid = 0;
+	backup_wanted = 1;
+	backup_pattern = sequencer.current_pattern;
+	backup_bank = sequencer.pattern_bank;
+}
+
+static void start_backup(void) {
+	if (job.type != JOB_NONE) return; //retried when the user copy/clear job is done
+	//the stored version must be current: unsaved changes would end up in the backup otherwise
+	if (backup_pattern != sequencer.current_pattern || backup_bank != sequencer.pattern_bank) {
+		backup_wanted = 0; //pattern changed again before the backup could be made
+		return;
+	}
+	queue_job(JOB_COPY, backup_pattern, backup_bank, BACKUP_PATTERN, BACKUP_BANK);
+	backup_wanted = 0;
 }
 
 /* one EEPROM operation per call so the sequencer never stalls for long */
@@ -355,11 +369,14 @@ void storage_service(void) {
 		attr_write_pending = 0;
 		return;
 	}
-	if (job.type == JOB_NONE) return;
+	if (job.type == JOB_NONE) {
+		if (backup_wanted) start_backup();
+		return;
+	}
 	switch (job.stage) {
 		case 0: //pattern data into the pager buffer
 			if (job.type == JOB_COPY) {
-				pattern_to_write = read_pattern(job.src_pattern*PAGES_PER_PATTERN*PAGE_SIZE, job.src_bank);
+				read_pattern_into(&pattern_to_write, job.src_pattern*PAGES_PER_PATTERN*PAGE_SIZE, job.src_bank);
 			} else {
 				default_pattern_data(&pattern_to_write);
 			}
@@ -374,16 +391,26 @@ void storage_service(void) {
 				attr_clear(&attr_to_write);
 			}
 			attr_write(attr_slot(job.dst_pattern, job.dst_bank), &attr_to_write);
+			if (job.dst_bank == BACKUP_BANK) {
+				backup_valid = (job.src_pattern == backup_pattern && job.src_bank == backup_bank);
+			} else if (job.dst_pattern == backup_pattern && job.dst_bank == backup_bank) {
+				backup_valid = 0; //the backed up pattern was overwritten by a copy/clear
+			}
 			job.type = JOB_NONE;
 			break;
 	}
 }
 
 uint8_t storage_reload(void) {
-	while (!storage_idle()) { //make sure the backup is complete
+	if (backup_pattern != sequencer.current_pattern || backup_bank != sequencer.pattern_bank) return 0; //e.g. a fill is playing
+	while (!storage_idle() || backup_wanted) { //make sure the backup is complete
 		storage_service();
+		if (backup_pattern != sequencer.current_pattern || backup_bank != sequencer.pattern_bank) return 0;
 	}
-	pattern_data p = read_pattern(BACKUP_PATTERN*PAGES_PER_PATTERN*PAGE_SIZE, BACKUP_BANK);
+	if (!backup_valid) return 0;
+	pattern_data *pp = &pattern_to_write; //storage is idle here: the writer buffer is free
+	read_pattern_into(pp, BACKUP_PATTERN*PAGES_PER_PATTERN*PAGE_SIZE, BACKUP_BANK);
+	#define p (*pp)
 	if (p.step_num[FIRST] > 15) return 0; //never written (erased EEPROM)
 	sequencer.pattern[VAR_A] = p.variation_a;
 	sequencer.pattern[VAR_B] = p.variation_b;
@@ -398,6 +425,7 @@ uint8_t storage_reload(void) {
 		sequencer.new_shuffle_amount = p.shuffle;
 		flag.shuffle_change = 1;
 	}
+	#undef p
 	attr_read(ATTR_SLOT_BACKUP, &pattern_attrs);
 	return 1;
 }

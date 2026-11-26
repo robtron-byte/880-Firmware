@@ -485,9 +485,9 @@ void toggle_variation(void) {
 }
 
 void read_next_pattern(uint8_t pattern_num, uint8_t pattern_bank) {
-	pattern_data next_pattern;
+	static pattern_data next_pattern; //static: 140 bytes, not on the stack
 	storage_finish_for(pattern_num, pattern_bank);
-	next_pattern = read_pattern(pattern_num*PAGES_PER_PATTERN*PAGE_SIZE, pattern_bank);
+	read_pattern_into(&next_pattern, pattern_num*PAGES_PER_PATTERN*PAGE_SIZE, pattern_bank);
 	if (next_pattern.step_num[FIRST] > 15) { //erased EEPROM
 		default_pattern_data(&next_pattern);
 	}

@@ -90,8 +90,6 @@ void flash_once(uint8_t led_index);
 
 void toggle(uint8_t led_index);
 
-void blink(uint8_t led_id, uint16_t speed);
-void stop_blink(uint8_t led_id);
 
 void turn_off_all_inst_leds(void);
 

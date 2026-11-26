@@ -179,9 +179,13 @@ int main(void)
 
 	//sequencer.previous_pattern = 0;
 	//sequencer.previous_bank = 0;
+	if (sequencer.pattern_bank >= NUM_BANKS) sequencer.pattern_bank = sequencer.new_bank = 0;
+	sequencer.new_bank = sequencer.pattern_bank;
+	sequencer.new_pattern = sequencer.current_pattern;
 	read_next_pattern(sequencer.current_pattern, sequencer.pattern_bank); //load first pattern
-		//sequencer.current_pattern = sequencer.new_pattern = 0;
-	turn_on(sequencer.current_pattern);
+	scenes_read();
+	storage_queue_backup(); //reload restores this state
+	ui_init(); //10 ms UI tick on Timer4 (Timer4 itself is set up in setup_clock)
 	//update_step_led_mask();
 	
 	//recall clock mode
