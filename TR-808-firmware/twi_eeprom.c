@@ -317,6 +317,11 @@ void default_pattern_data(pattern_data *p) {
 /* the reload backup is only used when it belongs to the pattern that is current */
 static uint8_t backup_valid = 0, backup_wanted = 0, backup_pattern, backup_bank;
 
+/* is there a backup (made or being made) of this pattern? */
+uint8_t storage_backup_for(uint8_t pattern, uint8_t bank) {
+	return (backup_valid || backup_wanted) && backup_pattern == pattern && backup_bank == bank;
+}
+
 uint8_t storage_idle(void) {
 	return !pattern_writer_busy() && !attr_write_pending && job.type == JOB_NONE && !backup_wanted;
 }

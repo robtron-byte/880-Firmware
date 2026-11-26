@@ -257,7 +257,7 @@ static void tap_write(void) {
 	uint8_t part, step;
 	uint8_t d = locate_hit(&part, &step);
 	uint8_t edit = sequencer.part_editing;
-	if (step > sequencer.step_num[edit]) return;
+	if (sequencer.step_num[edit] > 15 || step > sequencer.step_num[edit]) return;
 	write_hit(edit, step, sequencer.current_inst);
 	if (d == TAP_CURRENT_SOUNDED && part == edit && sequencer.current_inst != AC) {
 		trigger_drum(sequencer.current_inst, 0); //that step already played: let it sound now
@@ -265,6 +265,7 @@ static void tap_write(void) {
 }
 
 static void do_reload(void) {
+	if (fill_active || !storage_backup_for(sequencer.current_pattern, sequencer.pattern_bank)) return; //nothing to restore
 	if (sequencer.START) {
 		reload_pending = 1;
 	} else if (storage_reload()) {
@@ -346,7 +347,10 @@ static void handle_tap(void) {
 			} else if (clear_all_armed && (uint16_t)(now_t - clear_all_t) < CONFIRM_TICKS) {
 				clear_all_armed = 0;
 				clear_all_patterns();
-				read_next_pattern(sequencer.current_pattern, sequencer.pattern_bank);
+				flag.pattern_edit = 0;
+				fill_active = 0;
+				flag.intro = 0;
+				pattern_load(sequencer.current_pattern, sequencer.pattern_bank);
 				storage_queue_backup(); //the old backup must not come back
 			} else {
 				clear_all_armed = 1;
@@ -515,9 +519,7 @@ static void pattern_layer_step(uint8_t k) {
 						flag.length_change = 0;
 						flag.second_clear = 0;
 						if (sequencer.START) {
-							discard_edits = 1; //edits until the measure end are dropped too
-							sequencer.new_pattern = k;
-							flag.pattern_change = 1;
+							reload_current = 1; //loaded at the next measure end, edits until then are dropped
 						} else {
 							pattern_load(k, bank);
 						}

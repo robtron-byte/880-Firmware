@@ -140,7 +140,7 @@ void process_tick(void) {
 
 
 uint8_t reload_pending = 0;
-uint8_t discard_edits = 0; //current pattern is being overwritten by a copy: do not write RAM back
+uint8_t reload_current = 0; //current pattern was overwritten by a copy: reload it at the next measure end, drop RAM edits
 uint8_t fill_active = 0; //a fill or intro is playing instead of the basic pattern
 uint8_t fill_from_pattern, fill_from_bank; //basic pattern to return to
 
@@ -238,9 +238,15 @@ void process_stop(void) {
 		flag.pattern_change = 0;
 		inst_flash_mask = 0;
 		//apply pending measure-end changes now
-		if (discard_edits) {
-			discard_edits = 0;
+		reload_pending = 0;
+		if (reload_current) { //copied content must be loaded, RAM edits are dropped
+			reload_current = 0;
 			flag.pattern_edit = 0;
+			flag.length_change = 0;
+			flag.second_clear = 0;
+			if (sequencer.new_pattern == sequencer.current_pattern && sequencer.new_bank == sequencer.pattern_bank) {
+				pattern_load(sequencer.current_pattern, sequencer.pattern_bank);
+			}
 		}
 		if (flag.second_clear || flag.length_change) apply_length_changes();
 		//return to the selected pattern (a fill or intro may be playing) and apply a pending pattern/bank change
@@ -276,10 +282,8 @@ void update_fill(void) {
 		read_next_pattern(sequencer.current_intro_fill, sequencer.pattern_bank);
 		fill_active = 1;
 		sequencer.part_playing = FIRST;
-		if (!flag.pattern_change) { //a pattern chosen for the next measure stays chosen
-			sequencer.new_pattern = fill_from_pattern;
-			sequencer.new_bank = fill_from_bank;
-		}
+		sequencer.new_pattern = fill_from_pattern; //return here after the fill
+		sequencer.new_bank = fill_from_bank;
 		sequencer.current_pattern = sequencer.current_intro_fill;
 		sequencer.basic_variation = sequencer.current_variation; //store current variation
 		sequencer.current_variation = sequencer.intro_fill_var;
@@ -353,11 +357,18 @@ void process_new_measure(void) {
 
 	sequencer.current_step = 0;
 	sequencer.loop_idx = 0;
-	if (discard_edits) { //a copy onto this pattern is about to be loaded
-		discard_edits = 0;
+	if (reload_current) { //a copy overwrote this pattern: load it now, RAM edits are dropped
+		reload_current = 0;
+		reload_pending = 0;
 		flag.pattern_edit = 0;
 		flag.length_change = 0;
 		flag.second_clear = 0;
+		uint8_t pending = flag.pattern_change;
+		pattern_take(sequencer.current_pattern, sequencer.pattern_bank, 1);
+		flag.pattern_change = pending;
+		sequencer.part_playing = SECOND; //the toggle below restarts with the 1st part
+		if (sequencer.step_num[SECOND] == NO_STEPS) sequencer.part_playing = FIRST;
+		flag.pre_scale_change = 1;
 	}
 	if (reload_pending && storage_idle()) { //otherwise try again at the next measure (never block the downbeat)
 		reload_pending = 0;
@@ -537,9 +548,10 @@ void pattern_take(uint8_t pattern_num, uint8_t pattern_bank, uint8_t backup) {
 	fill_active = 0;
 	flag.intro = 0;
 	if (sequencer.mode == SECOND_PART) second_part_autocopy(); //still editing the 2nd part
-	if (changed && backup) {
+	if (changed) reload_pending = 0;
+	if (backup && (changed || !storage_backup_for(pattern_num, pattern_bank))) {
 		storage_queue_backup(); //for reload
-		recall_dirty = 1;
+		if (changed) recall_dirty = 1;
 	}
 }
 
