@@ -74,7 +74,6 @@ static struct modkey m_shift = {WRITE_SW}, m_alt = {IF_VAR_SW}, m_bvar = {BASIC_
 static struct modkey *const mods[4] = {&m_shift, &m_alt, &m_bvar, &m_clear};
 
 /* ---------- UI state ---------- */
-static uint8_t prev_mode = FIRST_PART; //mode to return to from PATTERN CLEAR
 static uint8_t hs_step = NONE; //EDIT: first held step (shown on the PRE-SCALE LEDs)
 static uint16_t hs_mask, hs_was_on, hs_seen; //all held steps, which of them were set before, debounced
 static uint8_t hs_adjusted, hs_show_odds;
@@ -90,9 +89,13 @@ static uint16_t clear_flash_t;
 static uint8_t copy_src = NONE, copy_src_bank;
 static uint8_t del_armed = NONE;
 static uint16_t del_armed_t;
-static uint8_t clear_all_armed = 0;
-static uint16_t clear_all_t;
 static uint16_t prev_loop_mask = 0;
+/* scene key held in the pattern layer (PERFORM):
+ * released within 0.4 s = recall; held longer = the current mutes go into the scene,
+ * mutes changed while it is held are added, stored when the key is released */
+static uint8_t scene_hold = NONE, scene_storing;
+static uint16_t scene_hold_t;
+#define SCENE_HOLD_TICKS 40
 
 void ui_init(void) {
 	//Timer4: 10 ms tick (16 MHz / 1024 / 156), CTC mode set up in setup_clock()
@@ -287,21 +290,20 @@ static void do_reload(void) {
 
 /* ---------- key handlers ---------- */
 
+/* 2nd part has content (exists and is not just about to be removed) */
+static uint8_t second_in_use(void) {
+	return sequencer.step_num[SECOND] != NO_STEPS && !flag.second_clear;
+}
+
+/* MODE: PERFORM -> 1st PART -> 2nd PART (only if it has content) -> PERFORM
+ * SHIFT + MODE: 2nd PART on (an empty one is filled with the 1st part); in the 2nd PART: back to the 1st */
 static void handle_mode_key(void) {
 	if (!press(MODE_SW)) return;
 	if (sequencer.SHIFT) {
 		m_shift.used = 1;
-		if (sequencer.mode == PATTERN_CLEAR) {
-			set_mode(prev_mode);
-		} else {
-			prev_mode = sequencer.mode;
-			set_mode(PATTERN_CLEAR);
-		}
-	} else if (sequencer.ALT && IS_EDIT(sequencer.mode)) {
-		m_alt.used = 1;
-		set_mode(sequencer.mode == FIRST_PART ? SECOND_PART : FIRST_PART);
-	} else if (sequencer.mode == PATTERN_CLEAR) {
-		set_mode(prev_mode);
+		set_mode(sequencer.mode == SECOND_PART ? FIRST_PART : SECOND_PART);
+	} else if (sequencer.mode == FIRST_PART && second_in_use()) {
+		set_mode(SECOND_PART);
 	} else if (IS_EDIT(sequencer.mode)) {
 		set_mode(MANUAL_PLAY);
 	} else {
@@ -349,30 +351,12 @@ static void handle_tap(void) {
 		cycle_attr(1);
 		return;
 	}
-	if (sequencer.SHIFT && sequencer.mode != PATTERN_CLEAR) {
+	if (sequencer.SHIFT) {
 		m_shift.used = 1;
 		do_reload();
 	} else if (sequencer.ALT && perform()) {
 		m_alt.used = 1;
 		sequencer.recording ^= 1;
-	} else if (sequencer.mode == PATTERN_CLEAR) {
-		if (sequencer.CLEAR) {
-			m_clear.used = 1;
-			if (sequencer.START) {
-				clear_all_armed = 0; //only when stopped
-			} else if (clear_all_armed && (uint16_t)(now_t - clear_all_t) < CONFIRM_TICKS) {
-				clear_all_armed = 0;
-				clear_all_patterns();
-				flag.pattern_edit = 0;
-				fill_active = 0;
-				flag.intro = 0;
-				pattern_load(sequencer.current_pattern, sequencer.pattern_bank);
-				storage_queue_backup(); //the old backup must not come back
-			} else {
-				clear_all_armed = 1;
-				clear_all_t = now_t;
-			}
-		}
 	} else if (IS_EDIT(sequencer.mode)) {
 		if (sequencer.CLEAR) {
 			m_clear.used = 1;
@@ -438,9 +422,9 @@ static void handle_inst_keys(void) {
 			} else if (sequencer.CLEAR && k >= 1) {
 				m_clear.used = 1;
 				solo_toggle(d);
-			} else if (sequencer.recording && sequencer.START) {
+			} else if (sequencer.recording && sequencer.START && scene_hold == NONE) {
 				live_hit(k == 0 ? AC : d);
-			} else if (sequencer.inst_layer == INST_LAYER_MUTE) {
+			} else if (sequencer.inst_layer == INST_LAYER_MUTE || scene_hold != NONE) { //scene held: always mute keys
 				if (k == 0) {
 					unmute_all();
 				} else {
@@ -481,6 +465,26 @@ static void save_scene(uint8_t n) {
 	scene_write(n);
 	clear_flash = 1;
 	clear_flash_t = now_t;
+}
+
+
+static void recall_scene(uint8_t n);
+static void scene_service(void) {
+	if (scene_hold == NONE) return;
+	uint16_t steps = deb[4] | ((uint16_t)deb[3] << 8);
+	uint8_t held = ((steps >> scene_hold) & 1) || ((raw_steps() >> scene_hold) & 1);
+	if (held) {
+		if (!scene_storing && (uint16_t)(now_t - scene_hold_t) >= SCENE_HOLD_TICKS) {
+			scene_storing = 1; //store mode: steps blink fast while held
+		}
+		return;
+	}
+	if (scene_storing) {
+		save_scene(scene_hold - BASIC_RHYTHM);
+	} else {
+		recall_scene(scene_hold - BASIC_RHYTHM);
+	}
+	scene_hold = NONE;
 }
 
 static void recall_scene(uint8_t n) {
@@ -583,13 +587,13 @@ static void pattern_layer_step(uint8_t k) {
 			}
 		}
 	} else {
-		if (perform()) { //mute scenes
-			if (sequencer.SHIFT) {
-				m_shift.used = 1;
-				save_scene(k - BASIC_RHYTHM);
-			} else {
-				recall_scene(k - BASIC_RHYTHM);
-			}
+		if (perform() && sequencer.SHIFT) { //SHIFT + 13-16: fill-in for TAP
+			m_shift.used = 1;
+			sequencer.current_intro_fill = k;
+		} else if (perform()) { //mute scenes: click = recall, hold = store (see scene_service)
+			scene_hold = k;
+			scene_hold_t = now_t;
+			scene_storing = 0;
 		} else { //EDIT: intro/fill patterns 13-16 can be selected for editing
 			sequencer.current_intro_fill = k;
 			sequencer.chain_active = 0;
@@ -653,7 +657,7 @@ static void edit_step_release(void) {
 static void handle_step_keys(void) {
 	for (uint8_t k = 0; k < NUM_STEPS; k++) {
 		if (!press(k)) continue;
-		if (raw_down(BASIC_VAR_SW) && sequencer.mode != PATTERN_CLEAR) { //bank
+		if (raw_down(BASIC_VAR_SW)) { //bank
 			m_bvar.used = 1;
 			if (k < NUM_BANKS) pattern_request(sequencer.new_pattern, k);
 			continue;
@@ -670,11 +674,11 @@ static void handle_step_keys(void) {
 			}
 			continue;
 		}
-		if (sequencer.pattern_layer && sequencer.mode != PATTERN_CLEAR) {
+		if (sequencer.pattern_layer) {
 			pattern_layer_step(k);
 			continue;
 		}
-		if (IS_EDIT(sequencer.mode) || sequencer.mode == PATTERN_CLEAR) {
+		if (IS_EDIT(sequencer.mode)) {
 			if (sequencer.START) {
 				if (sequencer.SHIFT) {
 					m_shift.used = 1;
@@ -690,13 +694,13 @@ static void handle_step_keys(void) {
 							flag.pattern_edit = 1;
 						}
 					}
-				} else if (IS_EDIT(sequencer.mode)) {
+				} else {
 					edit_step_press(k);
 				}
 			} else {
 				if (sequencer.SHIFT) {
 					m_shift.used = 1;
-					if (sequencer.mode == PATTERN_CLEAR && k == DIN_RESET_STEP) { //PATTERN CLEAR: SHIFT + step 8
+					if (k == DIN_RESET_STEP) { //stopped: SHIFT + step 8 = DIN reset on/off
 						sequencer.din_reset_enable ^= 1;
 						recall_dirty = 1;
 					} else if (sequencer.clock_mode == DIN_SYNC_SLAVE && k < NUM_SYNC_COUNTS) {
@@ -770,11 +774,9 @@ static void handle_clicks(void) {
 		if (perform()) sequencer.inst_layer ^= 1;
 	}
 	if (clicked(&m_bvar)) {
-		if (sequencer.mode != PATTERN_CLEAR) {
-			sequencer.pattern_layer ^= 1;
-			copy_src = NONE;
-			del_armed = NONE;
-		}
+		sequencer.pattern_layer ^= 1;
+		copy_src = NONE;
+		del_armed = NONE;
 	}
 	if (clicked(&m_clear)) {
 		if (IS_EDIT(sequencer.mode)) {
@@ -789,7 +791,6 @@ static void handle_clicks(void) {
 			clear_flash_t = now_t;
 		}
 	}
-	if (!sequencer.CLEAR) clear_all_armed = 0;
 	if (del_armed != NONE && (uint16_t)(now_t - del_armed_t) >= CONFIRM_TICKS) del_armed = NONE;
 }
 
@@ -855,11 +856,7 @@ static void render_steps(uint8_t blink, uint8_t fast) {
 	uint16_t m = 0;
 	uint8_t run_on = sequencer.START && (clock.ppqn_counter < (clock.divider >> 1));
 	uint16_t run = run_on ? (1u << sequencer.play_step) : 0;
-	uint8_t version = sequencer.mode == PATTERN_CLEAR && sequencer.SHIFT && sequencer.TAP_HELD;
-	if (version) {
-		uint8_t v = (sequencer.version / 10) % 10;
-		if (v > 0) m = 1u << (v - 1);
-	} else if (raw_down(BASIC_VAR_SW) && sequencer.mode != PATTERN_CLEAR) {
+	if (raw_down(BASIC_VAR_SW)) {
 		m = 1u << sequencer.new_bank;
 	} else if (sequencer.ALT && sequencer.SHIFT && !sequencer.START && IS_EDIT(sequencer.mode)) {
 		m = 1u << sequencer.midi_channel;
@@ -868,15 +865,14 @@ static void render_steps(uint8_t blink, uint8_t fast) {
 	} else if (hs_step != NONE) {
 		m = inst_mask_for(sequencer.part_editing);
 		if (fast) m ^= hs_mask; //all held steps blink
-	} else if (sequencer.SHIFT && sequencer.mode == PATTERN_CLEAR) {
-		if (sequencer.din_reset_enable) m = 1u << DIN_RESET_STEP;
 	} else if (sequencer.SHIFT && !(sequencer.pattern_layer && perform())) {
 		if (!sequencer.START && sequencer.clock_mode == DIN_SYNC_SLAVE) {
 			m = 1u << clock.sync_count_index;
 		} else {
 			m = 1u << sequencer.new_shuffle_amount;
 		}
-	} else if (sequencer.pattern_layer || !sequencer.START || sequencer.mode == PATTERN_CLEAR) {
+		if (!sequencer.START && IS_EDIT(sequencer.mode) && sequencer.din_reset_enable) m |= 1u << DIN_RESET_STEP;
+	} else if (sequencer.pattern_layer || !sequencer.START) {
 		//pattern display
 		if (sequencer.chain_active && perform()) {
 			uint8_t lo = sequencer.chain_start < sequencer.chain_end ? sequencer.chain_start : sequencer.chain_end;
@@ -890,13 +886,16 @@ static void render_steps(uint8_t blink, uint8_t fast) {
 			}
 		}
 		if (!sequencer.START && !sequencer.pattern_layer && !blink && IS_EDIT(sequencer.mode)) m &= ~(1u << sequencer.current_pattern);
-		if (perform() && !sequencer.pattern_layer) m |= (1u << sequencer.current_intro_fill);
+		if (perform() && (!sequencer.pattern_layer || sequencer.SHIFT)) m |= (1u << sequencer.current_intro_fill); //pattern layer: SHIFT shows the fill
 		if (!perform() && sequencer.pattern_layer) m |= (1u << sequencer.current_intro_fill);
 		if (copy_src != NONE && copy_src_bank == sequencer.new_bank) {
 			if (fast) m |= (1u << copy_src); else m &= ~(1u << copy_src);
 		}
 		if (del_armed != NONE) {
 			if (fast) m |= (1u << del_armed); else m &= ~(1u << del_armed);
+		}
+		if (scene_hold != NONE && scene_storing) {
+			if (fast) m |= (1u << scene_hold); else m &= ~(1u << scene_hold);
 		}
 	} else if (IS_EDIT(sequencer.mode)) {
 		m = marked_mask_for(sequencer.part_editing);
@@ -914,10 +913,6 @@ static void render_steps(uint8_t blink, uint8_t fast) {
 static void render_insts(void) {
 	turn_off_all_inst_leds();
 	turn_off(LC_LED); turn_off(MC_LED); turn_off(HC_LED); turn_off(CL_LED); turn_off(MA_LED);
-	if (sequencer.mode == PATTERN_CLEAR && sequencer.SHIFT && sequencer.TAP_HELD) {
-		show_version_inst();
-		return;
-	}
 	uint8_t show_mutes_now = (perform() && sequencer.inst_layer == INST_LAYER_MUTE && !sequencer.recording) || (!perform() && sequencer.SHIFT);
 	if (show_mutes_now) {
 		for (uint8_t i = BD; i <= MA; i++) {
@@ -941,7 +936,6 @@ static void render_insts(void) {
 static void render_mode_leds(uint8_t blink, uint8_t fast) {
 	uint8_t m = 0;
 	switch (sequencer.mode) {
-		case PATTERN_CLEAR: m = (clear_all_armed && fast) ? 0 : 1 << 0; break;
 		case FIRST_PART: m = 1 << 1; break;
 		case SECOND_PART: m = 1 << 2; break;
 		default: m = 1 << 3; break;
@@ -960,10 +954,7 @@ static void render_mode_leds(uint8_t blink, uint8_t fast) {
 
 	//pre-scale LEDs (bits 2-5 of latch 5): pre-scale, odds/ratchet value, version
 	spi_data[LATCH_5] &= PRE_SCALE_LED_MASK;
-	if (sequencer.mode == PATTERN_CLEAR && sequencer.SHIFT && sequencer.TAP_HELD) {
-		uint8_t version = sequencer.version / 100;
-		if (version > 0 && version <= 4) spi_data[LATCH_5] |= 1 << (6 - version);
-	} else if (hs_step != NONE && sequencer.current_inst != AC) {
+	if (hs_step != NONE && sequencer.current_inst != AC) {
 		uint16_t key = attr_key(sequencer.part_editing, sequencer.current_variation, hs_step, sequencer.current_inst);
 		//just held: show ratchet (steady) and odds (blinking) alternately; after TAP/SHIFT: the value that was changed
 		uint8_t show_odds = hs_adjusted ? hs_show_odds : (((uint16_t)(now_t - hs_t) / 50) & 1); //ratchet first
@@ -1001,6 +992,7 @@ void ui_service(void) {
 	} else {
 		hs_reset();
 	}
+	scene_service();
 	handle_clicks();
 	if (press(IF_VAR_SW)) {} //handled as modifier / click
 	if (press(WRITE_SW)) {

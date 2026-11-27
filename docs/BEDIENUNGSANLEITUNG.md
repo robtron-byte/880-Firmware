@@ -44,16 +44,14 @@ Firmware für die **System80 880 Desktop (MK2)**, die live mit einer Hand gespie
 
 | Funktion | Tasten | Hinweis |
 |---|---|---|
-| EDIT ↔ PERFORM | **MODE** | Pattern, Takt und Mutes laufen nahtlos weiter, es wird nichts geladen. |
-| 1st ↔ 2nd PART (in EDIT) | **I/F-VAR halten + MODE** | Ein leerer 2nd PART wird mit dem 1st PART gefüllt. Ohne Änderung wieder raus = Kopie wird verworfen. |
-| PATTERN CLEAR an/aus | **SHIFT + MODE** | Nur für „alle Patterns löschen“, Versionsanzeige und DIN-Reset. |
+| Durchschalten | **MODE** | PERFORM → 1st PART → 2nd PART → PERFORM. Den 2nd PART gibt es dabei nur, wenn er Inhalt hat. Pattern, Takt und Mutes laufen nahtlos weiter, es wird nichts geladen. |
+| 2nd PART aktivieren | **SHIFT + MODE** | Geht aus jedem Modus. Ein leerer 2nd PART wird mit dem 1st PART gefüllt. Änderst du nichts und gehst wieder raus, wird die Kopie verworfen. Im 2nd PART bringt SHIFT + MODE dich zum 1st PART. |
 
 **LEDs bei MODE:**
 - 1st/2nd PART = EDIT
 - MANUAL PLAY = PERFORM
 - PLAY = Pattern-Ebene ist aktiv
 - COMPOSE = Aufnahme läuft
-- CLEAR PATTERN = PATTERN CLEAR
 
 Der Song-Modus ist entfernt.
 
@@ -105,8 +103,9 @@ Der Song-Modus ist entfernt.
 |---|---|---|
 | Pattern wählen | **Step 1–12** | beendet eine Kette |
 | Kette | **Pattern halten + zweites Pattern drücken** | spielt vom ersten bis zum zweiten Pattern im Kreis, nur in PERFORM |
-| Mute-Szene abrufen | **Step 13–16** | |
-| Mute-Szene speichern | **SHIFT halten + Step 13–16** | |
+| Mute-Szene abrufen | **Step 13–16 kurz drücken** | wird beim Loslassen abgerufen |
+| Mute-Szene speichern | **Step 13–16 halten** (ca. ½ s) | Der Step blinkt schnell, die aktuellen Mutes werden übernommen. Solange du hältst, kannst du mit den Instrument-Tasten weitere muten oder entmuten. Gespeichert wird beim Loslassen. |
+| Fill-In wählen (auch während es läuft) | **SHIFT halten + Step 13–16** | Bei gehaltenem SHIFT leuchtet der gewählte Fill wie ein Pattern. TAP spielt ihn im nächsten Takt. |
 | Pattern kopieren | **SHIFT halten + Quelle**, dann **SHIFT halten + Ziel** | Quelle blinkt; Bankwechsel dazwischen erlaubt; Quelle nochmal = Abbruch |
 | Pattern löschen | **CLEAR halten + Pattern zweimal drücken** | |
 
@@ -135,7 +134,7 @@ Gespeichert wird **immer automatisch am Taktende**.
 | Tap-Write | **TAP** im Takt | wird auf den nächsten 16tel gerundet |
 | Pattern-Länge (gilt für beide Parts) | **CLEAR halten + Step** im 1st PART | |
 | 2nd PART entfernen | **CLEAR halten + Step 1** im 2nd PART | |
-| Aktuelles Instrument löschen | **CLEAR klicken** | |
+| Aktuelles Instrument löschen | **CLEAR klicken** | nur im Part, den du gerade bearbeitest (1st oder 2nd PART) |
 | Ganzes Pattern löschen | **CLEAR zweimal kurz** | |
 | Variation A nach B kopieren | **SHIFT + CLEAR** | beide Parts, inkl. Odds/Ratchets; Steps blinken kurz |
 | Shuffle | **SHIFT halten + Step 1–6** | |
@@ -155,9 +154,7 @@ Die **PRE-SCALE-LEDs 1–4 zählen die Durchläufe** des Patterns, solange es l�
 | Sync-Modus speichern | **I/F-VAR + AUTO FILL IN** |
 | MIDI-Kanal | EDIT: **SHIFT + I/F-VAR halten + Step 1–16** |
 | DIN-Sync-Teiler (DIN Slave) | EDIT: **SHIFT + Step 1–6** |
-| DIN-Reset an/aus | PATTERN CLEAR: **SHIFT + Step 8** |
-| Alle Patterns löschen | PATTERN CLEAR, gestoppt: **CLEAR halten + TAP zweimal** |
-| Version anzeigen | PATTERN CLEAR: **SHIFT + TAP halten** (zeigt 1.1.6) |
+| DIN-Reset an/aus | EDIT: **SHIFT + Step 8** (bei gehaltenem SHIFT leuchtet Step 8, wenn er an ist) |
 
 **TRIGGER OUT 1** feuert mit dem **Low Tom**, **TRIGGER OUT 2** mit der **Low Conga**. Mute, Odds und Ratchets gelten auch für die Ausgänge.
 
@@ -174,6 +171,7 @@ Die **PRE-SCALE-LEDs 1–4 zählen die Durchläufe** des Patterns, solange es l�
 - Shift-Lock (SHIFT + ACCENT)
 - Step-Fill (SHIFT + TAP), Instrument löschen mit CLEAR + TAP; Variation A→B kopieren liegt jetzt auf SHIFT + CLEAR
 - Pattern-Kopieren bei Stop mit CLEAR + Step; Ersatz ist das neue Kopieren in PERFORM
+- Der Modus PATTERN CLEAR mit „alle Patterns löschen“ und der Versionsanzeige; einzelne Patterns löschst du mit CLEAR in der Pattern-Ebene
 
 **Achtung beim Zurückspielen der Original-Firmware:**
 - **Songs:** Gespeicherte Songs sind nicht mehr da. Der Reload-Speicher liegt im ehemaligen Song-Bereich.

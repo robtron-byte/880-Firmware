@@ -635,17 +635,16 @@ void copy_variation_a_to_b(void) {
 
 /* ---- CLEAR in EDIT ---- */
 void clear_current_instrument(void) {
-	uint8_t v = sequencer.current_variation;
-	for (uint8_t part = 0; part < NUM_PARTS; part++) {
-		if (sequencer.current_inst == AC) {
-			sequencer.pattern[v].accent[part] = 0;
-		} else {
-			for (uint8_t i = 0; i < NUM_STEPS; i++) {
-				sequencer.pattern[v].part[part][i] &= ~(1u << sequencer.current_inst);
-			}
+	uint8_t v = sequencer.current_variation, part = sequencer.part_editing; //only the part being edited
+	if (sequencer.current_inst == AC) {
+		sequencer.pattern[v].accent[part] = 0;
+	} else {
+		for (uint8_t i = 0; i < NUM_STEPS; i++) {
+			sequencer.pattern[v].part[part][i] &= ~(1u << sequencer.current_inst);
 		}
+		attr_remove_inst(&pattern_attrs, part, v, sequencer.current_inst);
 	}
-	if (sequencer.current_inst != AC) attr_remove_inst(&pattern_attrs, v, sequencer.current_inst);
+	if (part == SECOND) sequencer.second_untouched = 0;
 	flag.pattern_edit = 1;
 	update_inst_led_mask();
 }

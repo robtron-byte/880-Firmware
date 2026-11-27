@@ -127,8 +127,10 @@ void test_attr_remove_inst_and_part(void) {
 	attr_set(&a, attr_key(1, 0, 2, 3), 2, 1);
 	attr_set(&a, attr_key(0, 1, 3, 3), 2, 1); /* other variation */
 	attr_set(&a, attr_key(0, 0, 4, 5), 2, 1); /* other instrument */
-	attr_remove_inst(&a, 0, 3);
-	TEST_ASSERT_EQUAL_UINT8(2, attr_count(&a));
+	attr_remove_inst(&a, 0, 0, 3); /* part 1 only */
+	TEST_ASSERT_EQUAL_UINT8(3, attr_count(&a));
+	TEST_ASSERT_EQUAL_UINT8(1, attr_get_odds(&a, attr_key(0, 0, 1, 3)));
+	TEST_ASSERT_EQUAL_UINT8(2, attr_get_odds(&a, attr_key(1, 0, 2, 3))); /* other part stays */
 	TEST_ASSERT_EQUAL_UINT8(2, attr_get_odds(&a, attr_key(0, 1, 3, 3)));
 	TEST_ASSERT_EQUAL_UINT8(2, attr_get_odds(&a, attr_key(0, 0, 4, 5)));
 	attr_set(&a, attr_key(1, 1, 9, 2), 1, 3);

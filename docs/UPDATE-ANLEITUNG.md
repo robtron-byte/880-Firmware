@@ -18,7 +18,7 @@ Deine Patterns liegen auf einem eigenen Speicherchip und bleiben beim Update erh
 4. Den MIDI-Ausgang deines Interfaces wählen.
 5. Bei „Firmware“ **Load .SYX File** wählen und `880-perform.syx` laden.
 6. Senden. Die SYNC-LED blinkt **gelb**, solange Daten ankommen. Nicht ausschalten und nicht das Kabel ziehen.
-7. Danach startet die 880 neu. Zur Kontrolle: SHIFT + MODE, dann SHIFT + TAP halten zeigt die Version **1.1.6**.
+7. Danach startet die 880 neu. Zur Kontrolle: MODE wechselt jetzt nur noch zwischen MANUAL PLAY und 1st PART (die Original-Firmware schaltet durch alle Modus-LEDs).
 
 Wenn das Interface Daten verschluckt, erhöhst du im Web-Updater den **Delay**, z. B. auf 250 ms.
 

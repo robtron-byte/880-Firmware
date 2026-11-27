@@ -161,11 +161,11 @@ uint8_t attr_set(struct attr_block *a, uint16_t key, uint8_t odds, uint8_t ratch
 	return 1;
 }
 
-void attr_remove_inst(struct attr_block *a, uint8_t var, uint8_t inst) {
+void attr_remove_inst(struct attr_block *a, uint8_t part, uint8_t var, uint8_t inst) {
+	uint16_t want = attr_key(part, var, 0, inst);
 	uint8_t i = 0;
 	while (i < attr_count(a)) {
-		uint16_t e = a->entry[i];
-		if (((e >> 5) & 1) == (var & 1) && ((e >> 6) & 0x0F) == inst) {
+		if ((a->entry[i] & ATTR_KEY_MASK & ~0x0F) == want) {
 			attr_delete_at(a, i);
 		} else {
 			i++;

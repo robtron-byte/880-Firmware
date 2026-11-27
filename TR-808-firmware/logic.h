@@ -72,8 +72,8 @@ uint8_t attr_get_odds(const struct attr_block *a, uint16_t key);
 uint8_t attr_get_ratchet(const struct attr_block *a, uint16_t key);
 /* set values (1..4). entry removed when both are 1. returns 0 if the list is full */
 uint8_t attr_set(struct attr_block *a, uint16_t key, uint8_t odds, uint8_t ratchet);
-/* remove every entry of an instrument in one variation (both parts) */
-void attr_remove_inst(struct attr_block *a, uint8_t var, uint8_t inst);
+/* remove every entry of an instrument in one part of one variation */
+void attr_remove_inst(struct attr_block *a, uint8_t part, uint8_t var, uint8_t inst);
 /* remove every entry of a part (both variations) */
 void attr_remove_part(struct attr_block *a, uint8_t part);
 /* copy all entries of variation `src` to variation `dst` (dst entries are replaced) */
