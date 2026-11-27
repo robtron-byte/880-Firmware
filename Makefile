@@ -54,8 +54,14 @@ $(TARGET).syx: $(TARGET).hex
 
 syx: $(TARGET).syx
 
+# every release gets a running number and the date in its file name, e.g. firmware/880-perform-v2-20261127.syx
+# (older 880-perform files are deleted so only the newest one is in firmware/)
 release: all test
-	cp $(TARGET).syx firmware/880-perform.syx
+	@n=$$(( $$(cat firmware/RELEASE 2>/dev/null || echo 0) + 1 )); \
+	name=firmware/880-perform-v$$n-$$(date +%Y%m%d).syx; \
+	find firmware -maxdepth 1 -name '880-perform*.syx' -delete; \
+	cp $(TARGET).syx $$name; echo $$n > firmware/RELEASE; \
+	echo "Release: $$name"
 
 selftest:
 	python3 tools/hex2syx.py --selftest firmware/official/880-1.1.4-MK2.syx

@@ -6,7 +6,7 @@ Die 880 hat einen eingebauten Update-Modus (Bootloader). Er wird beim Update **n
 - Ein **USB-MIDI-Interface mit 5-poligem MIDI-OUT** (class compliant) und ein MIDI-Kabel
 - Einen Computer mit **Chrome oder Edge**. Alternativ SysEx Librarian (Mac) oder MIDI-OX (Windows).
 - Die Firmware-Datei:
-  - **880 Perform:** [`firmware/880-perform.syx`](../firmware/880-perform.syx)
+  - **880 Perform:** die Datei `880-perform-vNUMMER-DATUM.syx` im Ordner [`firmware`](../firmware). Die Nummer steigt mit jeder neuen Version, das Datum ist der Tag, an dem sie gebaut wurde. Es liegt immer nur die neueste dort.
   - **Original zum Zurückspielen:** [`firmware/official/880-1.1.4-MK2.syx`](../firmware/official/880-1.1.4-MK2.syx)
 
 Deine Patterns liegen auf einem eigenen Speicherchip und bleiben beim Update erhalten.
@@ -16,7 +16,7 @@ Deine Patterns liegen auf einem eigenen Speicherchip und bleiben beim Update erh
 2. **START/STOP gedrückt halten** und die 880 einschalten. Halten, bis die **SYNC-LED rot** leuchtet.
 3. Im Browser https://system80.net/firmware/ öffnen und MIDI erlauben.
 4. Den MIDI-Ausgang deines Interfaces wählen.
-5. Bei „Firmware“ **Load .SYX File** wählen und `880-perform.syx` laden.
+5. Bei „Firmware“ **Load .SYX File** wählen und die Datei `880-perform-v….syx` laden.
 6. Senden. Die SYNC-LED blinkt **gelb**, solange Daten ankommen. Nicht ausschalten und nicht das Kabel ziehen.
 7. Danach startet die 880 neu. Zur Kontrolle: MODE wechselt jetzt nur noch zwischen MANUAL PLAY und 1st PART (die Original-Firmware schaltet durch alle Modus-LEDs).
 
