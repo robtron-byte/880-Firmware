@@ -50,7 +50,7 @@ Firmware für die **System80 880 Desktop (MK2)**, die live mit einer Hand gespie
 **LEDs bei MODE:**
 - 1st/2nd PART = EDIT
 - MANUAL PLAY = PERFORM
-- PLAY = Pattern-Ebene ist aktiv
+- PLAY = Pattern-Ebene ist aktiv (zusätzlich leuchtet bei BASIC-VAR die LED **B** statt **A**)
 - COMPOSE = Aufnahme läuft
 
 Der Song-Modus ist entfernt.
@@ -64,7 +64,7 @@ Der Song-Modus ist entfernt.
 | Pattern-Ebene ein/aus | **BASIC-VAR klicken** | Die Step-Tasten 1–12 sind jetzt Pattern-Tasten. |
 | Pattern wählen | Pattern-Ebene: **Step 1–12** | Läuft der Sequencer, wechselt es am Ende des Patterns, sonst sofort. Das wartende Pattern blinkt. |
 | Bank wählen | **BASIC-VAR halten + Step 1–12** | Wechselt zusammen mit dem Pattern. |
-| Variation A → AB → B | **SHIFT + BASIC-VAR** | |
+| Variation A → AB → B | **SHIFT + BASIC-VAR** | Die A/B-LEDs bei BASIC-VAR zeigen die Variation nur, solange SHIFT gehalten wird. Sonst zeigen sie die Ebene: A = normal, B = Pattern-Ebene. |
 | Intro/Fill-Variation A/B | **I/F-VAR halten + BASIC-VAR** | |
 | Fill-Pattern wählen bzw. Pattern 13–16 bearbeiten | EDIT, Pattern-Ebene: **Step 13–16** | Solange du einen Fill bearbeitest, blinkt in der Step-Reihe sein Step (13–16). |
 | Pattern wählen bei Stop | EDIT: **Step 1–16**, PERFORM: **Step 1–12** (13–16 = Fill-Pattern) | |
@@ -113,6 +113,7 @@ Anzeige: Gehaltene Pads und gerade gespielte Instrumente leuchten. Mute-Szenen m
 | Fill im nächsten Takt | **TAP** | Stopp: TAP schaltet das Intro um |
 
 ### Pattern-Ebene (BASIC-VAR klicken)
+An der LED **B** bei BASIC-VAR (und der PLAY-LED) siehst du, dass die Pattern-Ebene aktiv ist; **A** = normale Step-Tasten.
 
 | Funktion | Tasten | Hinweis |
 |---|---|---|

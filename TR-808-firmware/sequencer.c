@@ -502,7 +502,13 @@ void process_step(void){
 				break;
 		}
 	}
-	spi_data[LATCH_5] |= sequencer.var_led_mask;
+	//BASIC-VAR LEDs show the step key layer (A = normal, B = pattern layer); the variation only while SHIFT is held
+	spi_data[LATCH_5] &= ~(led[BASIC_VAR_A_LED].spi_bit | led[BASIC_VAR_B_LED].spi_bit);
+	if (sequencer.SHIFT) {
+		spi_data[LATCH_5] |= sequencer.var_led_mask;
+	} else {
+		spi_data[LATCH_5] |= sequencer.pattern_layer ? led[BASIC_VAR_B_LED].spi_bit : led[BASIC_VAR_A_LED].spi_bit;
+	}
 }
 
 void update_shuffle(uint8_t shuffle_amount) {
