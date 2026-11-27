@@ -143,7 +143,7 @@ Gespeichert wird **immer automatisch am Taktende**.
 | Alle Mutes aufheben | **CLEAR + Instrument 1** | |
 | Solo | **CLEAR + Instrument** | wie bisher |
 
-Die **PRE-SCALE-LEDs 1–4 zählen die Durchläufe** des Patterns, solange es läuft. Daran siehst du, wann Steps mit Odds „jeder 2./3./4. Durchlauf“ dran sind: Sie spielen bei LED 1, „jeder 2.“ auch bei LED 3. **Steps mit Odds oder Ratchet** erkennst du in der Step-Reihe daran, dass sie zweimal pro Sekunde kurz ausgehen (gilt für das gewählte Instrument, in EDIT und in PERFORM bei STEPS SETZEN). Odds und Ratchets: höchstens **31 Steps pro Pattern** (beide Parts und Variationen zusammen). Ist die Liste voll, blinken die Steps kurz.
+Die **PRE-SCALE-LEDs 1–4 zählen die Durchläufe** des Patterns, solange es läuft. Daran siehst du, wann Steps mit Odds „jeder 2./3./4. Durchlauf“ dran sind: Sie spielen bei LED 1, „jeder 2.“ auch bei LED 3. **Steps mit Odds oder Ratchet** erkennst du in der Step-Reihe daran, dass sie einmal pro Sekunde ganz kurz ausgehen (ca. 0,1 s aus, 0,9 s an – unabhängig vom Tempo, auch während das Pattern läuft) (gilt für das gewählte Instrument, in EDIT und in PERFORM bei STEPS SETZEN). Odds und Ratchets: höchstens **31 Steps pro Pattern** (beide Parts und Variationen zusammen). Ist die Liste voll, blinken die Steps kurz.
 
 ---
 

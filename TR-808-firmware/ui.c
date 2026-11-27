@@ -791,10 +791,12 @@ static uint16_t attr_mask_for(uint8_t part) {
 	return m;
 }
 
-/* instrument steps; steps with odds/ratchets go dark briefly twice a second */
+/* instrument steps; steps with odds/ratchets go dark for 120 ms once per second.
+ * The rhythm is fixed (not tied to the tempo), slower than every other blink and mostly on,
+ * so it stays readable while the running light passes without drawing attention. */
 static uint16_t marked_mask_for(uint8_t part) {
 	uint16_t m = inst_mask_for(part);
-	if ((now_t % 50) < 10) m &= ~attr_mask_for(part);
+	if ((now_t % 100) < 12) m &= ~attr_mask_for(part);
 	return m;
 }
 
