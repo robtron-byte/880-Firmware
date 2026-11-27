@@ -6,7 +6,7 @@ Die 880 hat einen eingebauten Update-Modus (Bootloader). Er wird beim Update **n
 - Ein **USB-MIDI-Interface mit 5-poligem MIDI-OUT** (class compliant) und ein MIDI-Kabel
 - Einen Computer mit **Chrome oder Edge**. Alternativ SysEx Librarian (Mac) oder MIDI-OX (Windows).
 - Die Firmware-Datei:
-  - **880 Perform:** die Datei `880-perform-vNUMMER-DATUM.syx` im Ordner [`firmware`](../firmware). Die Nummer steigt mit jeder neuen Version, das Datum ist der Tag, an dem sie gebaut wurde. Es liegt immer nur die neueste dort.
+  - **880 Perform:** die Datei `880-perform-v1.xx.syx` im Ordner [`firmware`](../firmware), z. B. `880-perform-v1.01.syx`. Jede neue Version zählt um 0,01 hoch. Es liegt immer nur die neueste dort.
   - **Original zum Zurückspielen:** [`firmware/official/880-1.1.4-MK2.syx`](../firmware/official/880-1.1.4-MK2.syx)
 
 Deine Patterns liegen auf einem eigenen Speicherchip und bleiben beim Update erhalten.

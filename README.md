@@ -4,7 +4,7 @@
 - [Bedienungsanleitung](docs/BEDIENUNGSANLEITUNG.md)
 - [Firmware aufspielen (per MIDI)](docs/UPDATE-ANLEITUNG.md)
 - [Test-Checkliste](docs/TEST-CHECKLISTE.md)
-- Fertige Datei: `880-perform-vNUMMER-DATUM.syx` im Ordner [`firmware`](firmware), Original zum Zurückspielen: [`firmware/official/880-1.1.4-MK2.syx`](firmware/official/880-1.1.4-MK2.syx)
+- Fertige Datei: `880-perform-v1.xx.syx` im Ordner [`firmware`](firmware) (jede Version +0,01), Original zum Zurückspielen: [`firmware/official/880-1.1.4-MK2.syx`](firmware/official/880-1.1.4-MK2.syx)
 
 ---
 
@@ -23,7 +23,7 @@ See https://github.com/minisystem/880-firmware/tree/1.1.3 for earlier firmware v
 sudo apt install gcc-avr avr-libc binutils-avr   # toolchain
 make dfp      # download Microchip ATmega device pack (ATmega328PB support)
 make          # -> build/880-firmware.hex and build/880-firmware.syx (MIDI update file)
-make release  # copy the .syx to firmware/880-perform-v<N>-<date>.syx
+make release  # copy the .syx to firmware/880-perform-v<version>.syx (+0.01 each release)
 make test     # host unit tests
 make flash PROGRAMMER=usbasp   # optional, via avrdude
 ```
