@@ -555,7 +555,8 @@ static void apply_mutes(uint16_t mask) {
 }
 
 static void save_scene(uint8_t n) {
-	mute_scene[n] = mute_mask();
+	uint16_t mask = mute_mask();
+	mute_scene[n] = mask ? mask : 0xFFFF; //no mutes at all: the scene is empty again
 	scene_write(n);
 	clear_flash = 1;
 	clear_flash_t = now_t;
