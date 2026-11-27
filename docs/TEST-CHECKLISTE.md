@@ -30,7 +30,7 @@ Rückweg jederzeit: [Original-Firmware aufspielen](UPDATE-ANLEITUNG.md#wenn-etwa
 - [ ] D1 Instrument 2–12 muten sofort, Instrument 1 hebt alles auf, CLEAR + Instrument = Solo.
 - [ ] D2 I/F-VAR klicken → Auswahl, Instrument wählen; SHIFT klicken → Steps setzen funktioniert.
 - [ ] D3 Step-Loop: ein Step gehalten wiederholt 16tel, mehrere laufen nacheinander, Loslassen läuft nahtlos weiter.
-- [ ] D4 TAP spielt ein Fill (Fill-Pattern 13–16 vorher in EDIT gewählt/programmiert).
+- [ ] D4 TAP spielt ein Fill (Fill-Pattern 13–16 vorher in EDIT gewählt/programmiert; beim Bearbeiten blinkt dessen Step).
 - [ ] D5 Pattern-Kette: Pattern halten + zweites drücken.
 - [ ] D6 Mute-Szenen: Step 13–16 halten speichert (während des Haltens weitere Instrumente muten), kurz drücken ruft ab (auch nach Aus/Ein). SHIFT + Step 13–16 wählt den Fill-In.
 - [ ] D7 Kopieren (SHIFT + Quelle, SHIFT + Ziel) und Löschen (CLEAR + Pattern 2×).

@@ -900,6 +900,7 @@ static void render_steps(uint8_t blink, uint8_t fast) {
 	} else if (IS_EDIT(sequencer.mode)) {
 		m = marked_mask_for(sequencer.part_editing);
 		if (sequencer.part_playing == sequencer.part_editing) m ^= run;
+		if (sequencer.current_pattern >= BASIC_RHYTHM && blink) m ^= (1u << sequencer.current_pattern); //editing fill 13-16: its step blinks
 	} else if (sequencer.step_layer == STEP_LAYER_STEPS) {
 		m = marked_mask_for(sequencer.part_playing) ^ run;
 	} else {

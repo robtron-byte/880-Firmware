@@ -66,7 +66,7 @@ Der Song-Modus ist entfernt.
 | Bank wählen | **BASIC-VAR halten + Step 1–12** | Wechselt zusammen mit dem Pattern. |
 | Variation A → AB → B | **SHIFT + BASIC-VAR** | |
 | Intro/Fill-Variation A/B | **I/F-VAR halten + BASIC-VAR** | |
-| Fill-Pattern wählen bzw. Pattern 13–16 bearbeiten | EDIT, Pattern-Ebene: **Step 13–16** | |
+| Fill-Pattern wählen bzw. Pattern 13–16 bearbeiten | EDIT, Pattern-Ebene: **Step 13–16** | Solange du einen Fill bearbeitest, blinkt in der Step-Reihe sein Step (13–16). |
 | Pattern wählen bei Stop | EDIT: **Step 1–16**, PERFORM: **Step 1–12** (13–16 = Fill-Pattern) | |
 | Abspielrichtung | **I/F-VAR halten + Step 13 / 14 / 15 / 16** | vorwärts / rückwärts / Ping-Pong / zufällig, wird mit dem Pattern gespeichert |
 | Reload | **SHIFT + TAP** | Stand beim letzten Auswählen. Läuft der Sequencer, passiert das am Taktende. Wirkt nicht während eines Fills. |
