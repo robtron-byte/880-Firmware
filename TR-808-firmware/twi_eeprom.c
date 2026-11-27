@@ -508,30 +508,6 @@ void scene_write(uint8_t scene) {
 
 // This function will clear every pattern by blocking while it writes to each page. It should
 // only be run in special situations (like resetting the system).
-void clear_all_patterns(void) {
-	draining = 1; //finish queued writes first, they would put old data back afterwards
-	while (!storage_idle()) storage_service();
-	draining = 0;
-	wdt_disable(); //disable watchdog timer when clearing all patters as it takes longer than 1 second
-	default_pattern_data(&pattern_to_write);
-	struct attr_block empty;
-	attr_clear(&empty);
-	for (uint8_t bank = 0; bank < NUM_BANKS; bank++) {
-		for (uint8_t pattern = 0; pattern < PATTERNS_PER_BANK; pattern++) {
-			for (int page_num = 0; page_num <= NUM_PAGES_PATTERN; ++page_num) {
-				write_pattern_page(pattern*PAGES_PER_PATTERN*PAGE_SIZE, bank, &pattern_to_write, page_num);
-			}
-			attr_write(attr_slot(pattern, bank), &empty);
-		}
-	}
-	attr_write(ATTR_SLOT_BACKUP, &empty);
-	sequencer.midi_channel = sequencer.current_pattern = sequencer.new_pattern = 0;
-	sequencer.pattern_bank = sequencer.new_bank = 0;
-	sequencer.clock_mode = MIDI_MASTER;
-	eeprom_write_recall_data(); //initialize recall data in eeprom
-	wdt_enable(WDTO_1S);
-}
-
 /* finish a queued copy/clear into this pattern before it is loaded */
 void storage_finish_for(uint8_t pattern, uint8_t bank) {
 	uint8_t running = job.type != JOB_NONE && job.dst_pattern == pattern && job.dst_bank == bank;

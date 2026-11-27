@@ -51,11 +51,6 @@ void update_tempo(void) {
 	
 }
 
-void show_version_steps(void) {
-	uint8_t version_step = (sequencer.version/10)%10;
-	if (version_step > 0) turn_on(version_step - 1);
-}
-
 void process_tick(void) {
 	//TRIGGER_OUT |= (1<<TRIGGER_OUT_2);
 		

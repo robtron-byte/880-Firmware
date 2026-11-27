@@ -176,7 +176,6 @@ void toggle_variation(void);
 void read_next_pattern(uint8_t pattern_num, uint8_t pattern_bank);
 void pattern_load(uint8_t pattern_num, uint8_t pattern_bank); //load now (stopped) and make it current
 void pattern_request(uint8_t pattern_num, uint8_t pattern_bank); //at the end of the measure (running) or now (stopped)
-void show_version_steps(void);
 void service_ratchets(void);
 void second_part_autocopy(void);
 void second_part_leave(void);

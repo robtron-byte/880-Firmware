@@ -299,6 +299,7 @@ static uint8_t second_in_use(void) {
  * SHIFT + MODE: 2nd PART on (an empty one is filled with the 1st part); in the 2nd PART: back to the 1st */
 static void handle_mode_key(void) {
 	if (!press(MODE_SW)) return;
+	if (sequencer.ALT) m_alt.used = 1; //no I/F-VAR click on release
 	if (sequencer.SHIFT) {
 		m_shift.used = 1;
 		set_mode(sequencer.mode == SECOND_PART ? FIRST_PART : SECOND_PART);
@@ -325,6 +326,14 @@ static void cycle_attr(uint8_t ratchet) {
 	uint16_t key = attr_key(part, v, ref, sequencer.current_inst);
 	uint8_t new_odds = attr_get_odds(&pattern_attrs, key) % 4 + 1;
 	uint8_t new_rat = attr_get_ratchet(&pattern_attrs, key) % 4 + 1;
+	uint8_t need = 0; //new list entries: steps without odds/ratchet yet
+	uint16_t marked = attr_inst_steps(&pattern_attrs, part, v, sequencer.current_inst);
+	if ((ratchet ? new_rat : new_odds) > 1) need = popcount16(set & ~marked);
+	if (attr_count(&pattern_attrs) + need > ATTR_MAX) { //list full: change nothing, flash
+		clear_flash = 1;
+		clear_flash_t = now_t;
+		return;
+	}
 	uint8_t ok = 1;
 	for (uint8_t k = 0; k < NUM_STEPS; k++) {
 		if (!((set >> k) & 1)) continue;
@@ -591,6 +600,7 @@ static void pattern_layer_step(uint8_t k) {
 			m_shift.used = 1;
 			sequencer.current_intro_fill = k;
 		} else if (perform()) { //mute scenes: click = recall, hold = store (see scene_service)
+			if (scene_hold != NONE) return; //one scene at a time
 			scene_hold = k;
 			scene_hold_t = now_t;
 			scene_storing = 0;
@@ -919,7 +929,7 @@ static void render_steps(uint8_t blink, uint8_t fast) {
 static void render_insts(void) {
 	turn_off_all_inst_leds();
 	turn_off(LC_LED); turn_off(MC_LED); turn_off(HC_LED); turn_off(CL_LED); turn_off(MA_LED);
-	uint8_t show_mutes_now = (perform() && sequencer.inst_layer == INST_LAYER_MUTE && !sequencer.recording) || (!perform() && sequencer.SHIFT);
+	uint8_t show_mutes_now = (perform() && ((sequencer.inst_layer == INST_LAYER_MUTE && !sequencer.recording) || scene_hold != NONE)) || (!perform() && sequencer.SHIFT);
 	if (show_mutes_now) {
 		for (uint8_t i = BD; i <= MA; i++) {
 			if (drum_hit[i].muted) turn_on(drum_hit[i].led_index);

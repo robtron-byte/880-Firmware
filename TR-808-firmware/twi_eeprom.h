@@ -76,7 +76,6 @@ uint8_t storage_queue_copy(uint8_t src_pattern, uint8_t src_bank, uint8_t dst_pa
 uint8_t storage_queue_clear(uint8_t dst_pattern, uint8_t dst_bank);
 void scenes_read(void);
 void scene_write(uint8_t scene);
-void clear_all_patterns(void);
 void default_pattern_data(pattern_data *p);
 
 #endif

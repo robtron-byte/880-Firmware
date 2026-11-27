@@ -122,6 +122,8 @@ Gespeichert wird **immer automatisch am Taktende**.
 
 ## EDIT
 
+Steps setzen, löschen und Odds/Ratchets einstellen geht in EDIT, **während der Sequencer läuft**. Bei Stop wählen die Step-Tasten Patterns.
+
 | Funktion | Tasten | Hinweis |
 |---|---|---|
 | Instrument wählen | **Instrument-Taste** | wie bisher (inkl. Tom/Conga-Umschaltung durch erneutes Drücken) |

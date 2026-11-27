@@ -156,26 +156,6 @@ void show_mutes(void) {
 	
 }
 
-void show_version_inst(void) {
-	turn_off_all_inst_leds();
-	uint8_t version_inst = sequencer.version % 10;
-	
-	if (version_inst > 0) {
-		
-		if (version_inst == 1) { //exception for ACCENT LED
-			
-			turn_on(ACCENT_1_LED);
-			
-		} else {
-			
-			turn_on(drum_hit[version_inst - 2].led_index);
-		}
-	}
-	
-}
-
-
-
 void update_inst_led_mask(void) {
 	
 	sequencer.led_mask = 0;
