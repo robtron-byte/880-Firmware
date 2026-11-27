@@ -97,7 +97,7 @@ static uint8_t pad_inst[NUM_STEPS]; //PERFORM pads: voice of each pad (set on pr
  * held: mutes changed while it is held are stored into it on release; an empty scene held for 1 s
  * stores the current mutes. Nothing jumps when storing. */
 static uint8_t scene_hold = NONE, scene_storing, scene_was_empty;
-static uint16_t scene_hold_t, scene_base;
+static uint16_t scene_hold_t, scene_base, scene_prev;
 #define SCENE_HOLD_TICKS 100 //1 s: a relaxed live press must not overwrite a scene
 
 void ui_init(void) {
@@ -569,9 +569,13 @@ static void scene_service(void) {
 	uint16_t steps = deb[4] | ((uint16_t)deb[3] << 8);
 	uint8_t held = ((steps >> scene_hold) & 1) || ((raw_steps() >> scene_hold) & 1);
 	if (held) {
-		if (!scene_storing && (mute_mask() != scene_base
-			|| (scene_was_empty && (uint16_t)(now_t - scene_hold_t) >= SCENE_HOLD_TICKS))) {
-			scene_storing = 1; //store on release: the step blinks fast while held
+		if (!scene_storing) {
+			if (mute_mask() != scene_base) {
+				scene_storing = 1; //mutes changed while held: store on release (the step blinks fast)
+			} else if (scene_was_empty && (uint16_t)(now_t - scene_hold_t) >= SCENE_HOLD_TICKS) {
+				apply_mutes(scene_prev); //empty scene held 1 s: the mutes from before the press go into it
+				scene_storing = 1;
+			}
 		}
 		return;
 	}
@@ -596,6 +600,8 @@ static void scene_press(uint8_t k) {
 	scene_hold_t = now_t;
 	scene_storing = 0;
 	scene_was_empty = mute_scene[n] == 0xFFFF;
+	scene_prev = mute_mask();
+	if (scene_was_empty) apply_mutes(0); //empty scene: all mutes off
 	recall_scene(n); //recall right away
 	scene_base = mute_mask();
 }

@@ -118,8 +118,9 @@ Anzeige: Gehaltene Pads und gerade gespielte Instrumente leuchten. Mute-Szenen m
 |---|---|---|
 | Pattern wählen | **Step 1–12** | beendet eine Kette |
 | Kette | **Pattern halten + zweites Pattern drücken** | spielt vom ersten bis zum zweiten Pattern im Kreis, nur in PERFORM |
-| Mute-Szene abrufen | **Step 13–16 drücken** | sofort beim Drücken |
-| Neue Mute-Szene speichern | **leere Szene 1 s halten** | Die aktuellen Mutes werden übernommen, der Step blinkt schnell. Solange du hältst, kannst du weitere muten oder entmuten. Gespeichert wird beim Loslassen. |
+| Mute-Szene abrufen | **Step 13–16 drücken** | sofort beim Drücken. Eine **leere** Szene hebt alle Mutes (und Solo) auf. |
+| Neue Szene aufbauen | **leere Szene halten + Instrumente muten** | Beim Drücken sind alle Mutes aus; was du beim Halten mutest, wird beim Loslassen gespeichert. |
+| Aktuelle Mutes als neue Szene | **leere Szene 1 s halten** (ohne etwas zu muten) | Nach 1 s kommen deine Mutes von vor dem Drücken zurück und werden übernommen (der Step blinkt schnell). Gespeichert wird beim Loslassen. |
 | Gespeicherte Szene bearbeiten | **Szene halten + Instrumente muten/entmuten** | Die Szene ist sofort aktiv; was du beim Halten änderst, wird beim Loslassen in ihr gespeichert. Nimmst du alle Mutes heraus, ist die Szene danach leer. |
 | Mute-Szene löschen | **CLEAR halten + Step 13–16** | Danach ist sie leer und kann neu gespeichert werden. Leere Szenen blitzen in I/F-VAR B alle 2 s auf. |
 | Fill-In wählen (auch während es läuft) | **SHIFT halten + Step 13–16** | Bei gehaltenem SHIFT leuchtet der gewählte Fill wie ein Pattern. TAP spielt ihn im nächsten Takt. |

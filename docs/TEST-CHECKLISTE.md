@@ -32,7 +32,7 @@ Rückweg jederzeit: [Original-Firmware aufspielen](UPDATE-ANLEITUNG.md#wenn-etwa
 - [ ] D3 Step-Loop: ein Step gehalten wiederholt 16tel, mehrere laufen nacheinander, Loslassen läuft nahtlos weiter.
 - [ ] D4 TAP spielt ein Fill (Fill-Pattern 13–16 vorher in EDIT gewählt/programmiert; beim Bearbeiten blinkt dessen Step).
 - [ ] D5 Pattern-Kette: Pattern halten + zweites drücken.
-- [ ] D6 Mute-Szenen: drücken ruft sofort ab (auch nach Aus/Ein). Leere Szene 1 s halten speichert die aktuellen Mutes, ohne dass vorher etwas umspringt. Gespeicherte Szene halten + Instrumente muten ändert sie. CLEAR + Szene löscht sie. SHIFT + Step 13–16 wählt den Fill-In.
+- [ ] D6 Mute-Szenen: drücken ruft sofort ab (auch nach Aus/Ein). Leere Szene drücken hebt alle Mutes auf; halten + muten baut eine neue Szene; 1 s halten ohne zu muten übernimmt die Mutes von vorher. Gespeicherte Szene halten + Instrumente muten ändert sie. CLEAR + Szene löscht sie. SHIFT + Step 13–16 wählt den Fill-In.
 - [ ] D7 Kopieren (SHIFT + Quelle, SHIFT + Ziel) und Löschen (CLEAR + Pattern 2×).
 - [ ] D8 Toms (I/F-VAR + 4/5/6), Congas (SHIFT + 4/5/6).
 - [ ] D9 Aufnahme (I/F-VAR + TAP): Einspielen landet auf dem richtigen 16tel, kein Doppelschlag.
