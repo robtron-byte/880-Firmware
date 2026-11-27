@@ -363,9 +363,12 @@ void process_new_measure(void) {
 		flag.pattern_edit = 0;
 		flag.length_change = 0;
 		flag.second_clear = 0;
-		uint8_t pending = flag.pattern_change;
+		uint8_t pending = flag.pattern_change; //keep a pattern/bank the user picked meanwhile
+		uint8_t next_p = sequencer.new_pattern, next_b = sequencer.new_bank;
 		pattern_take(sequencer.current_pattern, sequencer.pattern_bank, 1);
 		flag.pattern_change = pending;
+		sequencer.new_pattern = next_p;
+		sequencer.new_bank = next_b;
 		sequencer.part_playing = SECOND; //the toggle below restarts with the 1st part
 		if (sequencer.step_num[SECOND] == NO_STEPS) sequencer.part_playing = FIRST;
 		flag.pre_scale_change = 1;
