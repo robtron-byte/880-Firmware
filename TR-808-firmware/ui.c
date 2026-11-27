@@ -90,6 +90,7 @@ static uint8_t copy_src = NONE, copy_src_bank;
 static uint8_t del_armed = NONE;
 static uint16_t del_armed_t;
 static uint16_t prev_loop_mask = 0;
+static uint8_t tap_reload_armed, tap_prev; //PERFORM: SHIFT + TAP = reload on release, unless something was played (= recording)
 static uint8_t pad_inst[NUM_STEPS]; //PERFORM pads: voice of each pad (set on press, SHIFT = alternate voice)
 /* scene key in the pattern layer (PERFORM):
  * press = recall right away; held longer than 0.4 s = the mutes from before the press come back and go into
@@ -253,9 +254,15 @@ static uint8_t locate_hit(uint8_t *part_out, uint8_t *step_out) {
 }
 
 /* live hit in PERFORM (toms/congas, recording) */
+/* PERFORM: SHIFT + TAP held while running = everything played is recorded */
+static uint8_t rec_hold(void) {
+	return perform() && sequencer.START && sequencer.SHIFT && sequencer.TAP_HELD;
+}
+
 static void live_hit(uint8_t inst) {
 	if (inst != AC) trigger_drum(inst, 0);
-	if (sequencer.recording && sequencer.START) {
+	tap_reload_armed = 0; //played something: SHIFT + TAP is a recording, no reload
+	if ((sequencer.recording || rec_hold()) && sequencer.START) {
 		uint8_t part, step;
 		uint8_t d = locate_hit(&part, &step);
 		write_hit(part, step, inst);
@@ -271,6 +278,7 @@ static uint8_t pads_active(void) {
 }
 
 static void pad_press(uint8_t k) {
+	tap_reload_armed = 0; //played something: SHIFT + TAP is a recording, no reload
 	if (k == 0) return; //accent pad: only while held
 	uint8_t d = k - 1;
 	if (sequencer.SHIFT && !sequencer.TAP_HELD && k >= 3 && k <= 7) { //SHIFT + TAP = recording: no voice switch
@@ -286,7 +294,7 @@ static void pad_press(uint8_t k) {
 	uint8_t part, step;
 	if (locate_hit(&part, &step) == TAP_CURRENT_SOUNDED) {
 		trigger_drum(d, vel); //the step just played: sound now, repeats from the next step
-		if (sequencer.SHIFT && sequencer.TAP_HELD && step <= sequencer.step_num[part]) { //recording: onto that step
+		if (rec_hold() && step <= sequencer.step_num[part]) { //recording: onto that step
 			write_hit(part, step, d);
 			if (vel) write_hit(part, step, AC);
 		}
@@ -295,12 +303,16 @@ static void pad_press(uint8_t k) {
 	}
 }
 
+static void do_reload(void);
 /* held pads -> voices repeated on every step */
 static void update_pads(void) {
 	uint16_t mask = 0;
 	uint8_t acc = 0;
-	pad_record = pads_active() && sequencer.START && sequencer.SHIFT && sequencer.TAP_HELD;
-	if (pad_record) flag.fill = 0; //TAP pressed before SHIFT: it is a recording, not a fill
+	pad_record = pads_active() && rec_hold();
+	if (rec_hold()) flag.fill = 0; //TAP pressed before SHIFT: it is a recording, not a fill
+	if (tap_prev && !sequencer.TAP_HELD && tap_reload_armed) do_reload(); //SHIFT + TAP released without playing: reload
+	if (!sequencer.TAP_HELD) tap_reload_armed = 0;
+	tap_prev = sequencer.TAP_HELD;
 	if (pads_active() && sequencer.START) {
 		uint16_t held = deb[4] | ((uint16_t)deb[3] << 8);
 		for (uint8_t k = 1; k < BASIC_RHYTHM; k++) {
@@ -412,8 +424,9 @@ static void handle_tap(void) {
 		cycle_attr(1);
 		return;
 	}
-	if (sequencer.SHIFT && pads_active()) { //pad layer: SHIFT + TAP held = record the pads (no reload)
+	if (sequencer.SHIFT && perform()) { //PERFORM: reload when TAP is released without playing anything
 		m_shift.used = 1;
+		tap_reload_armed = 1;
 	} else if (sequencer.SHIFT) {
 		m_shift.used = 1;
 		do_reload();
@@ -485,7 +498,7 @@ static void handle_inst_keys(void) {
 			} else if (sequencer.CLEAR && k >= 1) {
 				m_clear.used = 1;
 				solo_toggle(d);
-			} else if (sequencer.recording && sequencer.START && scene_hold == NONE) {
+			} else if ((sequencer.recording || rec_hold()) && sequencer.START && scene_hold == NONE) {
 				live_hit(k == 0 ? AC : d);
 			} else if (sequencer.inst_layer == INST_LAYER_MUTE || scene_hold != NONE) { //scene held: always mute keys
 				if (k == 0) {

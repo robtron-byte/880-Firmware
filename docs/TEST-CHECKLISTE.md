@@ -24,7 +24,7 @@ Rückweg jederzeit: [Original-Firmware aufspielen](UPDATE-ANLEITUNG.md#wenn-etwa
 - [ ] C1 MODE mehrfach während des Spielens: Pattern und Takt ändern sich **nicht**.
 - [ ] C2 BASIC-VAR klicken, Step 1–12: Pattern wechselt am Pattern-Ende.
 - [ ] C3 BASIC-VAR halten + Step: Bank wechselt.
-- [ ] C4 SHIFT + TAP (Reload) bringt das Pattern auf den Stand beim Auswählen.
+- [ ] C4 SHIFT + TAP kurz (Reload) bringt das Pattern auf den Stand beim Auswählen. SHIFT + TAP halten und dabei Pads/Instrument-Tasten spielen nimmt auf, ohne Reload.
 
 ## D. PERFORM
 - [ ] D1 Instrument 2–12 muten sofort, Instrument 1 hebt alles auf, CLEAR + Instrument = Solo.

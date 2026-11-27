@@ -69,7 +69,7 @@ Der Song-Modus ist entfernt.
 | Fill-Pattern wählen bzw. Pattern 13–16 bearbeiten | EDIT, Pattern-Ebene: **Step 13–16** | Solange du einen Fill bearbeitest, blinkt in der Step-Reihe sein Step (13–16). |
 | Pattern wählen bei Stop | EDIT: **Step 1–16**, PERFORM: **Step 1–12** (13–16 = Fill-Pattern) | |
 | Abspielrichtung | **I/F-VAR halten + Step 13 / 14 / 15 / 16** | vorwärts / rückwärts / Ping-Pong / zufällig, wird mit dem Pattern gespeichert |
-| Reload | **SHIFT + TAP** | Stand beim letzten Auswählen. Läuft der Sequencer, passiert das am Taktende. Wirkt nicht während eines Fills. |
+| Reload | **SHIFT + TAP** (in PERFORM: beim Loslassen von TAP, wenn du dabei nichts gespielt hast) | Stand beim letzten Auswählen. Läuft der Sequencer, passiert das am Taktende. Wirkt nicht während eines Fills. |
 
 ---
 
@@ -96,7 +96,7 @@ Der Song-Modus ist entfernt.
 |---|---|---|
 | Instrument spielen | **Step 2–12** = BD, SD, LT, MT, HT, RS, CP, CB, CY, OH, CH | Anschlagen spielt sofort bzw. auf dem nächsten 16tel. **Halten = 16tel-Wirbel im Takt.** Mehrere Pads gleichzeitig gehen. Spielt auch, wenn das Instrument gemutet ist. |
 | Congas, Claves, Maracas | **SHIFT + Step 4–8** | Tom/Conga, Rimshot/Claves und Clap/Maracas teilen sich je eine Stimme: Spielt das Pattern auf demselben 16tel das Gegenstück, klingt nur eins von beiden. |
-| Pads aufnehmen | **SHIFT + TAP halten** + Pads | Solange beide gehalten werden, werden die Schläge und Wirbel ins Pattern geschrieben (auf die 16tel, die gerade spielen). Mit SHIFT + TAP werden Pad 4–8 dabei nicht auf Congas umgeschaltet. In der Pad-Ebene löst SHIFT + TAP kein Reload aus. |
+| Pads aufnehmen | **SHIFT + TAP halten** + Pads | Schläge und Wirbel werden ins Pattern geschrieben (siehe „Aufnahme halten“). Pad 4–8 bleiben dabei Toms/Rimshot/Clap. |
 | Mit Accent | **Step 1 halten** + Pads | Der Accent gilt beim 808-Schaltkreis für den ganzen Schlag, also auch für Pattern-Instrumente auf diesem 16tel. |
 | Mute-Szene abrufen / speichern | **Step 13–16** drücken / halten | wie in der Pattern-Ebene |
 | Fill-In wählen | **SHIFT + Step 13–16** | |
@@ -127,6 +127,7 @@ Anzeige: Gehaltene Pads und gerade gespielte Instrumente leuchten. Mute-Szenen m
 | Funktion | Tasten | Hinweis |
 |---|---|---|
 | Aufnahme an/aus | **I/F-VAR halten + TAP** | COMPOSE-LED blinkt |
+| Aufnahme halten | **SHIFT + TAP halten** (Sequencer läuft) | Alles, was du dabei spielst, wird auf die 16tel gerundet ins Pattern geschrieben: Pads und Wirbel (I/F-VAR auf B) und die Instrument-Tasten (Taste 2–12, mit SHIFT Taste 4–8 = Congas/Claves/Maracas). Am besten erst SHIFT, dann TAP drücken. Spielst du nichts, ist es beim Loslassen ein Reload. |
 | Einspielen | **Instrument 1–12** (auch Toms/Congas wie oben) | gerundet auf den nächsten 16tel; während der Aufnahme spielen die Instrument-Tasten immer, egal welche Ebene |
 
 Gespeichert wird **immer automatisch am Taktende**.
