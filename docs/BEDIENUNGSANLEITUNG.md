@@ -103,8 +103,8 @@ Der Song-Modus ist entfernt.
 |---|---|---|
 | Pattern wählen | **Step 1–12** | beendet eine Kette |
 | Kette | **Pattern halten + zweites Pattern drücken** | spielt vom ersten bis zum zweiten Pattern im Kreis, nur in PERFORM |
-| Mute-Szene abrufen | **Step 13–16 kurz drücken** | wird beim Loslassen abgerufen |
-| Mute-Szene speichern | **Step 13–16 halten** (ca. ½ s) | Der Step blinkt schnell, die aktuellen Mutes werden übernommen. Solange du hältst, kannst du mit den Instrument-Tasten weitere muten oder entmuten. Gespeichert wird beim Loslassen. |
+| Mute-Szene abrufen | **Step 13–16 drücken** | sofort beim Drücken |
+| Mute-Szene speichern | **Step 13–16 halten** (ca. ½ s) | Der Step blinkt schnell, die Mutes von vor dem Drücken kommen zurück und werden übernommen. Solange du hältst, kannst du mit den Instrument-Tasten weitere muten oder entmuten. Gespeichert wird beim Loslassen. |
 | Fill-In wählen (auch während es läuft) | **SHIFT halten + Step 13–16** | Bei gehaltenem SHIFT leuchtet der gewählte Fill wie ein Pattern. TAP spielt ihn im nächsten Takt. |
 | Pattern kopieren | **SHIFT halten + Quelle**, dann **SHIFT halten + Ziel** | Quelle blinkt; Bankwechsel dazwischen erlaubt; Quelle nochmal = Abbruch |
 | Pattern löschen | **CLEAR halten + Pattern zweimal drücken** | |

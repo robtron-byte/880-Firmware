@@ -90,11 +90,11 @@ static uint8_t copy_src = NONE, copy_src_bank;
 static uint8_t del_armed = NONE;
 static uint16_t del_armed_t;
 static uint16_t prev_loop_mask = 0;
-/* scene key held in the pattern layer (PERFORM):
- * released within 0.4 s = recall; held longer = the current mutes go into the scene,
- * mutes changed while it is held are added, stored when the key is released */
+/* scene key in the pattern layer (PERFORM):
+ * press = recall right away; held longer than 0.4 s = the mutes from before the press come back and go into
+ * the scene, mutes changed while it is held are added, stored when the key is released */
 static uint8_t scene_hold = NONE, scene_storing;
-static uint16_t scene_hold_t;
+static uint16_t scene_hold_t, scene_prev_mutes;
 #define SCENE_HOLD_TICKS 40
 
 void ui_init(void) {
@@ -465,12 +465,23 @@ static void handle_inst_keys(void) {
 	}
 }
 
-static void save_scene(uint8_t n) {
+static uint16_t mute_mask(void) {
 	uint16_t mask = 0;
 	for (uint8_t i = BD; i <= MA; i++) {
 		if (drum_hit[i].muted) mask |= (1u << i);
 	}
-	mute_scene[n] = mask;
+	return mask;
+}
+
+static void apply_mutes(uint16_t mask) {
+	for (uint8_t i = BD; i <= MA; i++) {
+		drum_hit[i].muted = (mask >> i) & 1;
+		drum_hit[i].solo = 0;
+	}
+}
+
+static void save_scene(uint8_t n) {
+	mute_scene[n] = mute_mask();
 	scene_write(n);
 	clear_flash = 1;
 	clear_flash_t = now_t;
@@ -485,24 +496,18 @@ static void scene_service(void) {
 	if (held) {
 		if (!scene_storing && (uint16_t)(now_t - scene_hold_t) >= SCENE_HOLD_TICKS) {
 			scene_storing = 1; //store mode: steps blink fast while held
+			apply_mutes(scene_prev_mutes); //the mutes from before the press are the ones to store
 		}
 		return;
 	}
-	if (scene_storing) {
-		save_scene(scene_hold - BASIC_RHYTHM);
-	} else {
-		recall_scene(scene_hold - BASIC_RHYTHM);
-	}
+	if (scene_storing) save_scene(scene_hold - BASIC_RHYTHM); //a short press was recalled on the press already
 	scene_hold = NONE;
 }
 
 static void recall_scene(uint8_t n) {
 	uint16_t mask = mute_scene[n];
 	if (mask == 0xFFFF) return; //never stored
-	for (uint8_t i = BD; i <= MA; i++) {
-		drum_hit[i].muted = (mask >> i) & 1;
-		drum_hit[i].solo = 0;
-	}
+	apply_mutes(mask);
 }
 
 /* make sure the stored version of the current pattern is up to date before it is copied */
@@ -600,10 +605,12 @@ static void pattern_layer_step(uint8_t k) {
 			m_shift.used = 1;
 			sequencer.current_intro_fill = k;
 		} else if (perform()) { //mute scenes: click = recall, hold = store (see scene_service)
-			if (scene_hold != NONE) return; //one scene at a time
+			if (scene_hold != NONE && ((raw_steps() >> scene_hold) & 1)) return; //one scene at a time (only while it is really held)
 			scene_hold = k;
 			scene_hold_t = now_t;
 			scene_storing = 0;
+			scene_prev_mutes = mute_mask();
+			recall_scene(k - BASIC_RHYTHM); //recall right away
 		} else { //EDIT: intro/fill patterns 13-16 can be selected for editing
 			sequencer.current_intro_fill = k;
 			sequencer.chain_active = 0;
