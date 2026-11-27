@@ -4,6 +4,7 @@
 - [Bedienungsanleitung](docs/BEDIENUNGSANLEITUNG.md)
 - [Firmware aufspielen (per MIDI)](docs/UPDATE-ANLEITUNG.md)
 - [Test-Checkliste](docs/TEST-CHECKLISTE.md)
+- For the original developer (English): [feature changes vs. 1.1.5](docs/FEATURE-CHANGES.md), [build options and 1.1.5 bugs](docs/NOTES-FOR-UPSTREAM.md)
 - Fertige Datei: `880-perform-v1.xx.syx` im Ordner [`firmware`](firmware) (jede Version +0,01; ältere Versionen in [`firmware/archiv`](firmware/archiv)), Original zum Zurückspielen: [`firmware/official/880-1.1.4-MK2.syx`](firmware/official/880-1.1.4-MK2.syx)
 
 ---
