@@ -254,6 +254,12 @@ static uint8_t locate_hit(uint8_t *part_out, uint8_t *step_out) {
 }
 
 /* live hit in PERFORM (toms/congas, recording) */
+/* PERFORM instrument keys select only where it is needed: I/F-VAR on A with the step keys on STEPS SETZEN.
+ * Everywhere else (A + LOOP, B = pads) they mute. */
+static uint8_t inst_keys_select(void) {
+	return sequencer.inst_layer == INST_LAYER_MUTE && sequencer.step_layer == STEP_LAYER_STEPS;
+}
+
 /* PERFORM: SHIFT + TAP held while running = everything played is recorded */
 static uint8_t rec_hold(void) {
 	return perform() && sequencer.START && sequencer.SHIFT && sequencer.TAP_HELD;
@@ -500,7 +506,7 @@ static void handle_inst_keys(void) {
 				solo_toggle(d);
 			} else if ((sequencer.recording || rec_hold()) && sequencer.START && scene_hold == NONE) {
 				live_hit(k == 0 ? AC : d);
-			} else if (sequencer.inst_layer == INST_LAYER_MUTE || scene_hold != NONE) { //scene held: always mute keys
+			} else if (!inst_keys_select() || scene_hold != NONE) { //scene held: always mute keys
 				if (k == 0) {
 					unmute_all();
 				} else {
@@ -1033,7 +1039,7 @@ static void render_steps(uint8_t blink, uint8_t fast) {
 static void render_insts(void) {
 	turn_off_all_inst_leds();
 	turn_off(LC_LED); turn_off(MC_LED); turn_off(HC_LED); turn_off(CL_LED); turn_off(MA_LED);
-	uint8_t show_mutes_now = (perform() && ((sequencer.inst_layer == INST_LAYER_MUTE && !sequencer.recording) || scene_hold != NONE)) || (!perform() && sequencer.SHIFT);
+	uint8_t show_mutes_now = (perform() && ((!inst_keys_select() && !sequencer.recording) || scene_hold != NONE)) || (!perform() && sequencer.SHIFT);
 	if (show_mutes_now) {
 		for (uint8_t i = BD; i <= MA; i++) {
 			if (drum_hit[i].muted) turn_on(drum_hit[i].led_index);

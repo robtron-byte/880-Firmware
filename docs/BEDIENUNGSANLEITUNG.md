@@ -76,19 +76,21 @@ Der Song-Modus ist entfernt.
 ## PERFORM
 
 ### Instrument-Tasten
-**I/F-VAR klicken** wechselt zwischen **MUTE** (LED A neben I/F-VAR) und **AUSWAHL** (LED B).
+**I/F-VAR klicken** wechselt zwischen **A** (LED A neben I/F-VAR: Step-Tasten = LOOP/STEPS SETZEN) und **B** (LED B: Step-Tasten = Pads und Mute-Szenen).
+
+Die Instrument-Tasten **muten immer** – in A und in B. Nur wenn I/F-VAR auf A steht **und** die Step-Tasten auf STEPS SETZEN (SHIFT-Klick), wählen sie stattdessen das Instrument, dessen Steps du setzt.
 
 | Funktion | Tasten |
 |---|---|
-| Mute an/aus (Tom und Conga, RS und CL, CP und MA immer zusammen) | MUTE: **Instrument 2–12** (gemutete leuchten) |
-| Alle Mutes und Solo aufheben | MUTE: **Instrument 1** |
-| Instrument wählen (zum Steps setzen) | AUSWAHL: **Instrument 1–12** |
+| Mute an/aus (Tom und Conga, RS und CL, CP und MA immer zusammen) | **Instrument 2–12** (gemutete leuchten) |
+| Alle Mutes und Solo aufheben | **Instrument 1** |
+| Instrument wählen (zum Steps setzen) | A + STEPS SETZEN: **Instrument 1–12** |
 | Solo an/aus | **CLEAR halten + Instrument** |
 | Low/Mid/Hi **Tom** spielen | **I/F-VAR halten + Instrument 4 / 5 / 6** |
 | Low/Mid/Hi **Conga**, Claves, Maracas spielen | **SHIFT halten + Instrument 4 / 5 / 6 / 7 / 8** |
 
 ### Step-Tasten
-**SHIFT klicken** wechselt zwischen **LOOP** und **STEPS SETZEN** (gilt, solange I/F-VAR auf MUTE steht). Beim Wechsel nach PERFORM ist LOOP aktiv.
+**SHIFT klicken** wechselt zwischen **LOOP** und **STEPS SETZEN** (gilt, solange I/F-VAR auf A steht; bei STEPS SETZEN wählen die Instrument-Tasten das Instrument). Beim Wechsel nach PERFORM ist LOOP aktiv.
 
 **Steht I/F-VAR auf AUSWAHL (LED B), werden die Step-Tasten zu Pads und Mute-Szenen:**
 
