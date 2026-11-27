@@ -28,7 +28,7 @@ Rückweg jederzeit: [Original-Firmware aufspielen](UPDATE-ANLEITUNG.md#wenn-etwa
 
 ## D. PERFORM
 - [ ] D1 Instrument 2–12 muten sofort, Instrument 1 hebt alles auf, CLEAR + Instrument = Solo.
-- [ ] D2 I/F-VAR klicken → Auswahl, Instrument wählen; SHIFT klicken → Steps setzen funktioniert.
+- [ ] D2 I/F-VAR klicken → Auswahl, Instrument wählen, Step-Tasten setzen sofort Steps (laufend und gestoppt). Zurück auf MUTE: SHIFT klicken → Steps setzen funktioniert ebenfalls.
 - [ ] D3 Step-Loop: ein Step gehalten wiederholt 16tel, mehrere laufen nacheinander, Loslassen läuft nahtlos weiter.
 - [ ] D4 TAP spielt ein Fill (Fill-Pattern 13–16 vorher in EDIT gewählt/programmiert; beim Bearbeiten blinkt dessen Step).
 - [ ] D5 Pattern-Kette: Pattern halten + zweites drücken.

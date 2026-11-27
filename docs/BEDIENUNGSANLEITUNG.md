@@ -88,12 +88,12 @@ Der Song-Modus ist entfernt.
 | Low/Mid/Hi **Conga**, Claves, Maracas spielen | **SHIFT halten + Instrument 4 / 5 / 6 / 7 / 8** |
 
 ### Step-Tasten
-**SHIFT klicken** wechselt zwischen **LOOP** und **STEPS SETZEN**. Beim Wechsel nach PERFORM ist LOOP aktiv.
+**SHIFT klicken** wechselt zwischen **LOOP** und **STEPS SETZEN**. Beim Wechsel nach PERFORM ist LOOP aktiv. **Steht I/F-VAR auf AUSWAHL, setzen die Step-Tasten immer Steps** (auch bei gestopptem Sequencer); die gesetzten Steps des gewählten Instruments leuchten.
 
 | Funktion | Tasten | Hinweis |
 |---|---|---|
 | Step-Loop | LOOP: **Step halten** | wiederholt in 16teln; mehrere gehaltene Steps laufen in Step-Reihenfolge; Loslassen = nahtlos weiter |
-| Step setzen / löschen | STEPS SETZEN: **Step 1–16** | für das gewählte Instrument, im gerade spielenden Part |
+| Step setzen / löschen | STEPS SETZEN oder AUSWAHL: **Step 1–16** | für das gewählte Instrument, im gerade spielenden Part (gestoppt: 1st PART) |
 | Shuffle | **SHIFT halten + Step 1–6** | |
 | Fill im nächsten Takt | **TAP** | Stopp: TAP schaltet das Intro um |
 

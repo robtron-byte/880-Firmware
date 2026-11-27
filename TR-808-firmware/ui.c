@@ -654,6 +654,11 @@ static void edit_step_release(void) {
 	if (!hs_mask) hs_reset();
 }
 
+/* PERFORM: step keys set steps in the STEPS layer, and always while the instrument keys select (I/F-VAR) */
+static uint8_t perform_steps(void) {
+	return sequencer.step_layer == STEP_LAYER_STEPS || sequencer.inst_layer == INST_LAYER_SELECT;
+}
+
 static void handle_step_keys(void) {
 	for (uint8_t k = 0; k < NUM_STEPS; k++) {
 		if (!press(k)) continue;
@@ -726,13 +731,13 @@ static void handle_step_keys(void) {
 			if (sequencer.SHIFT) {
 				m_shift.used = 1;
 				update_shuffle(k);
-			} else if (!sequencer.START) {
+			} else if (!sequencer.START && sequencer.inst_layer != INST_LAYER_SELECT) {
 				if (k < BASIC_RHYTHM) {
 					pattern_request(k, sequencer.new_bank);
 				} else {
 					sequencer.current_intro_fill = k;
 				}
-			} else if (sequencer.step_layer == STEP_LAYER_STEPS) {
+			} else if (perform_steps()) {
 				uint8_t part = sequencer.part_playing, v = sequencer.current_variation;
 				if (k <= sequencer.step_num[part]) {
 					if (sequencer.current_inst == AC) {
@@ -796,7 +801,7 @@ static void handle_clicks(void) {
 
 static void update_loop(void) {
 	uint16_t mask = 0;
-	if (perform() && sequencer.START && sequencer.step_layer == STEP_LAYER_LOOP && !sequencer.pattern_layer
+	if (perform() && sequencer.START && !perform_steps() && !sequencer.pattern_layer
 		&& !raw_down(BASIC_VAR_SW) && !sequencer.ALT && !sequencer.SHIFT) {
 		mask = deb[4] | ((uint16_t)deb[3] << 8);
 	}
@@ -872,7 +877,7 @@ static void render_steps(uint8_t blink, uint8_t fast) {
 			m = 1u << sequencer.new_shuffle_amount;
 		}
 		if (!sequencer.START && IS_EDIT(sequencer.mode) && sequencer.din_reset_enable) m |= 1u << DIN_RESET_STEP;
-	} else if (sequencer.pattern_layer || !sequencer.START) {
+	} else if (sequencer.pattern_layer || (!sequencer.START && !(perform() && sequencer.inst_layer == INST_LAYER_SELECT))) {
 		//pattern display
 		if (sequencer.chain_active && perform()) {
 			uint8_t lo = sequencer.chain_start < sequencer.chain_end ? sequencer.chain_start : sequencer.chain_end;
@@ -901,7 +906,7 @@ static void render_steps(uint8_t blink, uint8_t fast) {
 		m = marked_mask_for(sequencer.part_editing);
 		if (sequencer.part_playing == sequencer.part_editing) m ^= run;
 		if (sequencer.current_pattern >= BASIC_RHYTHM && blink) m ^= (1u << sequencer.current_pattern); //editing fill 13-16: its step blinks
-	} else if (sequencer.step_layer == STEP_LAYER_STEPS) {
+	} else if (perform_steps()) {
 		m = marked_mask_for(sequencer.part_playing) ^ run;
 	} else {
 		m = run | sequencer.loop_mask;
