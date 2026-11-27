@@ -119,8 +119,9 @@ An der LED **B** bei BASIC-VAR (und der PLAY-LED) siehst du, dass die Pattern-Eb
 |---|---|---|
 | Pattern wählen | **Step 1–12** | beendet eine Kette |
 | Kette | **Pattern halten + zweites Pattern drücken** | spielt vom ersten bis zum zweiten Pattern im Kreis, nur in PERFORM |
-| Mute-Szene abrufen | **Step 13–16 drücken** | sofort beim Drücken. Eine **leere** Szene schaltet alle Mutes (und Solo) aus. |
-| Szene speichern / überschreiben | **Szene halten + Instrumente muten/entmuten** | Beim Loslassen wird genau das gespeichert, was du dann hörst (der Step blinkt schnell). Bei einer leeren Szene fängst du also ohne Mutes an. Sind beim Loslassen keine Mutes an, ist die Szene leer. Halten ohne etwas zu ändern speichert nichts. |
+| Mute-Szene abrufen | **Step 13–16 drücken** | sofort beim Drücken. Eine leere Szene ändert nichts (alle Mutes aus: Instrument 1). |
+| Neue Szene speichern | **leere Szene 1 s halten** | Deine aktuellen Mutes werden übernommen (der Step blinkt schnell). Solange du hältst, kannst du weitere muten oder entmuten. Gespeichert wird beim Loslassen. |
+| Gespeicherte Szene bearbeiten | **Szene halten + Instrumente muten/entmuten** | Beim Loslassen wird gespeichert, was du dann hörst. Nimmst du alle Mutes heraus, ist die Szene danach leer. Halten ohne etwas zu ändern speichert nichts. |
 | Mute-Szene löschen | **CLEAR halten + Step 13–16** | Danach ist sie leer und kann neu gespeichert werden. Leere Szenen blitzen in I/F-VAR B alle 2 s auf. |
 | Fill-In wählen (auch während es läuft) | **SHIFT halten + Step 13–16** | Bei gehaltenem SHIFT leuchtet der gewählte Fill wie ein Pattern. TAP spielt ihn im nächsten Takt. |
 | Pattern kopieren | **SHIFT halten + Quelle**, dann **SHIFT halten + Ziel** | Quelle blinkt; Bankwechsel dazwischen erlaubt; Quelle nochmal = Abbruch |

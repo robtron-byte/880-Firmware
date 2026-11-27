@@ -94,11 +94,12 @@ static uint8_t tap_reload_armed, tap_fill; //PERFORM: SHIFT + TAP = reload on re
 static uint16_t tap_arm_t;
 static uint8_t pad_inst[NUM_STEPS]; //PERFORM pads: voice of each pad (set on press, SHIFT = alternate voice)
 /* scene keys 13-16 (PERFORM: pattern layer or I/F-VAR on B):
- * press = recall right away; an empty scene switches all mutes off. CLEAR + scene = delete it.
- * mutes changed while it is held = the mutes you hear are stored into it on release
- * (no mutes at all = the scene stays/becomes empty). Holding without changes stores nothing. */
-static uint8_t scene_hold = NONE, scene_storing;
-static uint16_t scene_base;
+ * press = recall right away (an empty scene changes nothing). CLEAR + scene = delete it.
+ * mutes changed while it is held = the mutes you hear are stored into it on release;
+ * an empty scene held for 1 s stores the current mutes. No mutes at all = the scene is empty. */
+static uint8_t scene_hold = NONE, scene_storing, scene_was_empty;
+static uint16_t scene_hold_t, scene_base;
+#define SCENE_HOLD_TICKS 100 //1 s
 
 void ui_init(void) {
 	//Timer4: 10 ms tick (16 MHz / 1024 / 156), CTC mode set up in setup_clock()
@@ -585,8 +586,9 @@ static void scene_service(void) {
 	uint16_t steps = deb[4] | ((uint16_t)deb[3] << 8);
 	uint8_t held = ((steps >> scene_hold) & 1) || ((raw_steps() >> scene_hold) & 1);
 	if (held) {
-		if (!scene_storing && mute_mask() != scene_base) {
-			scene_storing = 1; //mutes changed while held: store on release (the step blinks fast)
+		if (!scene_storing && (mute_mask() != scene_base
+			|| (scene_was_empty && (uint16_t)(now_t - scene_hold_t) >= SCENE_HOLD_TICKS))) {
+			scene_storing = 1; //store on release (the step blinks fast)
 		}
 		return;
 	}
@@ -607,12 +609,10 @@ static void scene_press(uint8_t k) {
 		return;
 	}
 	scene_hold = k;
+	scene_hold_t = now_t;
 	scene_storing = 0;
-	if (mute_scene[n] == 0xFFFF) {
-		apply_mutes(0); //empty scene: all mutes off
-	} else {
-		recall_scene(n); //recall right away
-	}
+	scene_was_empty = mute_scene[n] == 0xFFFF;
+	recall_scene(n); //recall right away (an empty scene changes nothing)
 	scene_base = mute_mask();
 }
 
