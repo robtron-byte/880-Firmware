@@ -159,6 +159,11 @@ void test_attr_validate_and_direction(void) {
 	TEST_ASSERT_EQUAL_UINT8(1, attr_count(&a));
 	TEST_ASSERT_TRUE(attr_validate(&a));
 	TEST_ASSERT_EQUAL_UINT8(DIR_RANDOM, attr_direction(&a));
+	/* duplicate cells (corrupted block) are rejected */
+	a.entry[1] = a.entry[0];
+	a.info = (a.info & ~0x1F) | 2;
+	TEST_ASSERT_FALSE(attr_validate(&a));
+	TEST_ASSERT_EQUAL_UINT8(0, attr_count(&a));
 }
 
 void test_attr_copy_var(void) {

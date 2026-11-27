@@ -83,6 +83,19 @@ int current_writing_page = -1;
 uint8_t current_pattern_num;
 uint8_t current_pattern_bank;
 
+/* EEPROM write cycle: a read right after a write would wait up to 5 ms (NACK retries).
+ * Background reads are only started 20-30 ms after the last write was started (chained writes
+ * can take ~12 ms). When the queue is drained on purpose (draining = 1) there is no settle wait. */
+static uint16_t last_write_t;
+static uint8_t draining = 0;
+static uint16_t ticks_now(void) {
+	uint16_t t;
+	ATOMIC_BLOCK(ATOMIC_RESTORESTATE) { t = ui_ticks; }
+	return t;
+}
+static void mark_write(void) { last_write_t = ticks_now(); }
+static uint8_t read_settled(void) { return draining || (uint16_t)(ticks_now() - last_write_t) >= 3; }
+
 void write_next_pattern_page();
 
 /* read a pattern into *out (by pointer: pattern_data is 140 bytes, keep it off the stack) */
@@ -173,6 +186,7 @@ void write_pattern_page(uint16_t memory_address, uint8_t bank, pattern_data *w_d
 	TWI_master_start_write_pattern(     EEPROM_DEVICE_ID,       // device address of eeprom chip
 	2 + bytes_to_write
 	);
+	mark_write();
 	//880 Perform: no waiting here. The transfer (and the NACK retries during the EEPROM write cycle)
 	//runs in the TWI interrupt; every other TWI user waits for TWI_busy before touching the buffer.
 }
@@ -285,6 +299,7 @@ static void eeprom_write_block_blocking(uint16_t addr, const void *src, uint8_t 
 	p_write_pattern->low_byte = addr;
 	memcpy(TWI_buffer + 2, src, n);
 	TWI_master_start_write(EEPROM_DEVICE_ID, 2 + n);
+	mark_write();
 	while(TWI_busy);
 }
 
@@ -301,17 +316,6 @@ void attr_write(uint8_t slot, const struct attr_block *a) {
 	eeprom_write_block_blocking(attr_addr(slot), a, ATTR_BYTES);
 }
 
-/* EEPROM write cycle: a read right after a write would wait up to 5 ms (NACK retries).
- * Background reads are only started 20 ms after the last background write. */
-static uint16_t last_write_t;
-static uint16_t ticks_now(void) {
-	uint16_t t;
-	ATOMIC_BLOCK(ATOMIC_RESTORESTATE) { t = ui_ticks; }
-	return t;
-}
-static void mark_write(void) { last_write_t = ticks_now(); }
-static uint8_t read_settled(void) { return (uint16_t)(ticks_now() - last_write_t) >= 2; }
-
 /* start a write and return; completion (and retries) happen in the TWI interrupt */
 static void attr_write_async(uint8_t slot, const struct attr_block *a) {
 	while(TWI_busy);
@@ -320,6 +324,7 @@ static void attr_write_async(uint8_t slot, const struct attr_block *a) {
 	p_write_pattern->low_byte = addr;
 	memcpy(TWI_buffer + 2, a, ATTR_BYTES);
 	TWI_master_start_write(EEPROM_DEVICE_ID, 2 + ATTR_BYTES);
+	mark_write();
 }
 
 void attr_queue_current(void) {
@@ -347,7 +352,8 @@ uint8_t storage_backup_for(uint8_t pattern, uint8_t bank) {
 }
 
 uint8_t storage_idle(void) {
-	return !pattern_writer_busy() && !attr_write_pending && job.type == JOB_NONE && !backup_wanted;
+	return !pattern_writer_busy() && !attr_write_pending && job.type == JOB_NONE && !backup_wanted
+		&& !TWI_busy && read_settled(); //nothing queued and the EEPROM is not busy writing
 }
 
 static uint8_t queue_job(uint8_t type, uint8_t sp, uint8_t sb, uint8_t dp, uint8_t db) {
@@ -393,11 +399,9 @@ void storage_service(void) {
 	if (TWI_busy) return; //previous transfer still running: never wait in the main loop
 	if (pattern_writer_busy()) {
 		write_next_pattern_page();
-		mark_write();
 		return;
 	}
 	if (attr_write_pending) {
-		mark_write();
 		attr_write_async(attr_write_slot, &attr_to_write);
 		attr_write_pending = 0;
 		return;
@@ -426,7 +430,6 @@ void storage_service(void) {
 				attr_clear(&attr_to_write);
 			}
 			attr_write_async(attr_slot(job.dst_pattern, job.dst_bank), &attr_to_write);
-			mark_write();
 			if (job.dst_bank == BACKUP_BANK) {
 				backup_valid = (job.src_pattern == backup_pattern && job.src_bank == backup_bank);
 			} else if (job.dst_pattern == backup_pattern && job.dst_bank == backup_bank) {
@@ -439,10 +442,15 @@ void storage_service(void) {
 
 uint8_t storage_reload(void) {
 	if (backup_pattern != sequencer.current_pattern || backup_bank != sequencer.pattern_bank) return 0; //e.g. a fill is playing
+	draining = 1;
 	while (!storage_idle() || backup_wanted) { //make sure the backup is complete
 		storage_service();
-		if (backup_pattern != sequencer.current_pattern || backup_bank != sequencer.pattern_bank) return 0;
+		if (backup_pattern != sequencer.current_pattern || backup_bank != sequencer.pattern_bank) {
+			draining = 0;
+			return 0;
+		}
 	}
+	draining = 0;
 	if (!backup_valid) return 0;
 	pattern_data *pp = &pattern_to_write; //storage is idle here: the writer buffer is free
 	read_pattern_into(pp, BACKUP_PATTERN*PAGES_PER_PATTERN*PAGE_SIZE, BACKUP_BANK);
@@ -497,6 +505,8 @@ void clear_all_patterns(void) {
 /* finish a queued copy/clear into this pattern before it is loaded */
 void storage_finish_for(uint8_t pattern, uint8_t bank) {
 	if (job.type != JOB_NONE && job.dst_pattern == pattern && job.dst_bank == bank) {
+		draining = 1;
 		while (job.type != JOB_NONE) storage_service();
+		draining = 0;
 	}
 }

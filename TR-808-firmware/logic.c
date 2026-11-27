@@ -95,10 +95,15 @@ uint8_t attr_validate(struct attr_block *a) {
 		return 0;
 	}
 	for (uint8_t i = 0; i < attr_count(a); i++) {
-		uint8_t inst = (a->entry[i] >> 6) & 0x0F;
-		if (inst > 15 || (a->entry[i] & 0xC000)) {
+		if (a->entry[i] & 0xC000) {
 			attr_clear(a);
 			return 0;
+		}
+		for (uint8_t j = i + 1; j < attr_count(a); j++) { //every cell may appear only once
+			if ((a->entry[i] & ATTR_KEY_MASK) == (a->entry[j] & ATTR_KEY_MASK)) {
+				attr_clear(a);
+				return 0;
+			}
 		}
 	}
 	return 1;

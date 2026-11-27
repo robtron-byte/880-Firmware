@@ -810,7 +810,7 @@ static void render_steps(uint8_t blink, uint8_t fast) {
 	} else if (sequencer.ALT) {
 		m = 1u << (BASIC_RHYTHM + attr_direction(&pattern_attrs));
 	} else if (hs_step != NONE) {
-		m = marked_mask_for(sequencer.part_editing);
+		m = inst_mask_for(sequencer.part_editing);
 		if (fast) m ^= (1u << hs_step);
 	} else if (sequencer.SHIFT && sequencer.mode == PATTERN_CLEAR) {
 		if (sequencer.din_reset_enable) m = 1u << DIN_RESET_STEP;
@@ -910,7 +910,7 @@ static void render_mode_leds(uint8_t blink, uint8_t fast) {
 	} else if (hs_step != NONE && sequencer.current_inst != AC) {
 		uint16_t key = attr_key(sequencer.part_editing, sequencer.current_variation, hs_step, sequencer.current_inst);
 		//just held: show ratchet (steady) and odds (blinking) alternately; after TAP/SHIFT: the value that was changed
-		uint8_t show_odds = hs_adjusted ? hs_show_odds : ((now_t / 50) & 1);
+		uint8_t show_odds = hs_adjusted ? hs_show_odds : (((uint16_t)(now_t - hs_t) / 50) & 1); //ratchet first
 		uint8_t n = show_odds ? attr_get_odds(&pattern_attrs, key) : attr_get_ratchet(&pattern_attrs, key);
 		if (!(show_odds && !fast)) spi_data[LATCH_5] |= 1 << (6 - n); //odds blink, ratchet steady
 	} else if (sequencer.START) { //pass counter 1-4 (odds: every 2nd/3rd/4th pass)
