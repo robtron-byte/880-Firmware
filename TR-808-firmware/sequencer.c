@@ -239,7 +239,11 @@ void process_stop(void) {
 		flag.pattern_change = 0;
 		inst_flash_mask = 0;
 		//apply pending measure-end changes now
-		if (fill_no_save) flag.pattern_edit = 0;
+		if (fill_no_save) {
+			flag.pattern_edit = 0;
+			flag.length_change = 0;
+			flag.second_clear = 0;
+		}
 		if (reload_current) { //copied content must be loaded, RAM edits are dropped
 			reload_pending = 0;
 			reload_current = 0;
@@ -379,8 +383,7 @@ void process_new_measure(void) {
 		flag.pattern_change = pending;
 		sequencer.new_pattern = next_p;
 		sequencer.new_bank = next_b;
-		sequencer.part_playing = SECOND; //the toggle below restarts with the 1st part
-		if (sequencer.step_num[SECOND] == NO_STEPS) sequencer.part_playing = FIRST;
+		//part_playing stays: the toggle below continues the pass normally
 		flag.pre_scale_change = 1;
 	}
 	if (reload_pending && storage_idle()) { //otherwise try again at the next measure (never block the downbeat)
@@ -595,7 +598,8 @@ void pattern_request(uint8_t pattern_num, uint8_t pattern_bank) {
 	if (sequencer.START) {
 		sequencer.new_pattern = pattern_num;
 		sequencer.new_bank = pattern_bank;
-		flag.pattern_change = (pattern_num != sequencer.current_pattern) || (pattern_bank != sequencer.pattern_bank);
+		//during a fill even the fill slot itself counts as a change (it becomes the basic pattern)
+		flag.pattern_change = (pattern_num != sequencer.current_pattern) || (pattern_bank != sequencer.pattern_bank) || fill_active;
 	} else {
 		pattern_load(pattern_num, pattern_bank);
 	}

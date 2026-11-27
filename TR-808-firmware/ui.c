@@ -478,6 +478,10 @@ static void recall_scene(uint8_t n) {
 
 /* make sure the stored version of the current pattern is up to date before it is copied */
 static void flush_current(void) {
+	if (fill_no_save) { //RAM holds overwritten fill content: never store it
+		flag.pattern_edit = 0;
+		return;
+	}
 	if (flag.pattern_edit) {
 		flag.pattern_edit = 0;
 		start_write_current_pattern(sequencer.current_pattern, sequencer.pattern_bank);
@@ -492,7 +496,17 @@ static void pattern_layer_step(uint8_t k) {
 			m_clear.used = 1;
 			if (del_armed == k && (uint16_t)(now_t - del_armed_t) < CONFIRM_TICKS) {
 				del_armed = NONE;
-				if (k == sequencer.current_pattern && bank == sequencer.pattern_bank) {
+				if (k == sequencer.current_pattern && bank == sequencer.pattern_bank && fill_active) {
+					//playing fill/intro slot: clear it in the EEPROM, the old RAM content is never stored
+					flag.pattern_edit = 0;
+					storage_queue_clear(k, bank);
+					if (sequencer.START) {
+						fill_no_save = 1;
+					} else {
+						read_next_pattern(k, bank);
+						if (sequencer.mode == SECOND_PART) second_part_autocopy();
+					}
+				} else if (k == sequencer.current_pattern && bank == sequencer.pattern_bank) {
 					clear_current_pattern();
 				} else {
 					storage_queue_clear(k, bank);
@@ -522,6 +536,7 @@ static void pattern_layer_step(uint8_t k) {
 							fill_no_save = 1;
 						} else {
 							read_next_pattern(k, bank); //stopped intro: show the copied content, intro stays on
+							if (sequencer.mode == SECOND_PART) second_part_autocopy();
 						}
 					} else if (k == sequencer.current_pattern && bank == sequencer.pattern_bank) {
 						//the playing pattern was overwritten: take the new content, drop unsaved edits

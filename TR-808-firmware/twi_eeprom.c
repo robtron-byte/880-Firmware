@@ -277,6 +277,11 @@ static struct {
 	uint8_t src_pattern, src_bank, dst_pattern, dst_bank;
 } job;
 
+/* one waiting user job: starts when the running (backup) job is done, nothing blocks the main loop */
+static struct {
+	uint8_t type, src_pattern, src_bank, dst_pattern, dst_bank;
+} pending_job;
+
 uint8_t attr_slot(uint8_t pattern, uint8_t bank) {
 	if (bank == BACKUP_BANK) return ATTR_SLOT_BACKUP;
 	return bank * PATTERNS_PER_BANK + pattern;
@@ -355,7 +360,7 @@ uint8_t storage_backup_for(uint8_t pattern, uint8_t bank) {
 }
 
 uint8_t storage_idle(void) {
-	return !pattern_writer_busy() && !attr_write_pending && job.type == JOB_NONE && !backup_wanted
+	return !pattern_writer_busy() && !attr_write_pending && job.type == JOB_NONE && pending_job.type == JOB_NONE && !backup_wanted
 		&& !TWI_busy && read_settled(); //nothing queued and the EEPROM is not busy writing
 }
 
@@ -370,20 +375,24 @@ static uint8_t queue_job(uint8_t type, uint8_t sp, uint8_t sb, uint8_t dp, uint8
 	return 1;
 }
 
-static void drain_job(void) { //finish a running (backup) job so a user job can start
-	draining = 1;
-	while (job.type != JOB_NONE) storage_service();
-	draining = 0;
+
+static uint8_t queue_user_job(uint8_t type, uint8_t sp, uint8_t sb, uint8_t dp, uint8_t db) {
+	if (queue_job(type, sp, sb, dp, db)) return 1;
+	if (pending_job.type != JOB_NONE) return 0; //both slots busy
+	pending_job.type = type;
+	pending_job.src_pattern = sp;
+	pending_job.src_bank = sb;
+	pending_job.dst_pattern = dp;
+	pending_job.dst_bank = db;
+	return 1;
 }
 
 uint8_t storage_queue_copy(uint8_t src_pattern, uint8_t src_bank, uint8_t dst_pattern, uint8_t dst_bank) {
-	drain_job();
-	return queue_job(JOB_COPY, src_pattern, src_bank, dst_pattern, dst_bank);
+	return queue_user_job(JOB_COPY, src_pattern, src_bank, dst_pattern, dst_bank);
 }
 
 uint8_t storage_queue_clear(uint8_t dst_pattern, uint8_t dst_bank) {
-	drain_job();
-	return queue_job(JOB_CLEAR, 0, 0, dst_pattern, dst_bank);
+	return queue_user_job(JOB_CLEAR, 0, 0, dst_pattern, dst_bank);
 }
 
 
@@ -420,7 +429,12 @@ void storage_service(void) {
 		return;
 	}
 	if (job.type == JOB_NONE) {
-		if (backup_wanted) start_backup();
+		if (pending_job.type != JOB_NONE) { //waiting user job first
+			queue_job(pending_job.type, pending_job.src_pattern, pending_job.src_bank, pending_job.dst_pattern, pending_job.dst_bank);
+			pending_job.type = JOB_NONE;
+		} else if (backup_wanted) {
+			start_backup();
+		}
 		return;
 	}
 	switch (job.stage) {
@@ -476,6 +490,8 @@ uint8_t storage_reload(void) {
 	#undef p
 	attr_read(ATTR_SLOT_BACKUP, &pattern_attrs);
 	sequencer.second_untouched = 0;
+	flag.second_clear = 0; //the restored pattern replaces pending length/2nd part changes
+	flag.length_change = 0;
 	if (sequencer.mode == SECOND_PART) second_part_autocopy(); //restored pattern may have no 2nd part
 	update_inst_led_mask();
 	return 1;
@@ -518,9 +534,11 @@ void clear_all_patterns(void) {
 
 /* finish a queued copy/clear into this pattern before it is loaded */
 void storage_finish_for(uint8_t pattern, uint8_t bank) {
-	if (job.type != JOB_NONE && job.dst_pattern == pattern && job.dst_bank == bank) {
+	uint8_t running = job.type != JOB_NONE && job.dst_pattern == pattern && job.dst_bank == bank;
+	uint8_t waiting = pending_job.type != JOB_NONE && pending_job.dst_pattern == pattern && pending_job.dst_bank == bank;
+	if (running || waiting) {
 		draining = 1;
-		while (job.type != JOB_NONE) storage_service();
+		while (job.type != JOB_NONE || (waiting && pending_job.type != JOB_NONE)) storage_service();
 		draining = 0;
 	}
 }
