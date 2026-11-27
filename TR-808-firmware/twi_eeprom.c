@@ -506,8 +506,6 @@ void scene_write(uint8_t scene) {
 	eeprom_write_block_blocking(SCENE_ADDR, mute_scene, sizeof(mute_scene));
 }
 
-// This function will clear every pattern by blocking while it writes to each page. It should
-// only be run in special situations (like resetting the system).
 /* finish a queued copy/clear into this pattern before it is loaded */
 void storage_finish_for(uint8_t pattern, uint8_t bank) {
 	uint8_t running = job.type != JOB_NONE && job.dst_pattern == pattern && job.dst_bank == bank;

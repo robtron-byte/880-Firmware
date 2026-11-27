@@ -28,11 +28,11 @@ Rückweg jederzeit: [Original-Firmware aufspielen](UPDATE-ANLEITUNG.md#wenn-etwa
 
 ## D. PERFORM
 - [ ] D1 Instrument 2–12 muten sofort, Instrument 1 hebt alles auf, CLEAR + Instrument = Solo.
-- [ ] D2 Instrument-Tasten muten in A und B; nur A + STEPS SETZEN wählt Instrumente. I/F-VAR klicken → B: Step 2–12 spielen BD…CH, gehalten als 16tel-Wirbel im Takt; Step 1 halten = Accent; SHIFT + Step 4–8 = Congas usw. Step 13–16 = Mute-Szenen (drücken = abrufen, halten = speichern); gespeicherte leuchten, leere blitzen alle 2 s. SHIFT + TAP halten und Pads spielen: Schläge landen im Pattern. Zurück auf A (MUTE): SHIFT klicken → Steps setzen.
+- [ ] D2 Instrument-Tasten muten in A und B; nur A + STEPS SETZEN wählt Instrumente. I/F-VAR klicken → B: Step 2–12 spielen BD…CH, gehalten als 16tel-Wirbel im Takt; Step 1 halten = Accent; SHIFT + Step 4–8 = Congas usw. Step 13–16 = Mute-Szenen (siehe D6); gespeicherte leuchten, leere blitzen alle 2 s. SHIFT + TAP halten und Pads spielen: Schläge landen im Pattern. Zurück auf A (MUTE): SHIFT klicken → Steps setzen.
 - [ ] D3 Step-Loop: ein Step gehalten wiederholt 16tel, mehrere laufen nacheinander, Loslassen läuft nahtlos weiter.
 - [ ] D4 TAP spielt ein Fill (Fill-Pattern 13–16 vorher in EDIT gewählt/programmiert; beim Bearbeiten blinkt dessen Step).
 - [ ] D5 Pattern-Kette: Pattern halten + zweites drücken.
-- [ ] D6 Mute-Szenen: Step 13–16 halten speichert (während des Haltens weitere Instrumente muten), kurz drücken ruft ab (auch nach Aus/Ein). SHIFT + Step 13–16 wählt den Fill-In.
+- [ ] D6 Mute-Szenen: drücken ruft sofort ab (auch nach Aus/Ein). Leere Szene 1 s halten speichert die aktuellen Mutes, ohne dass vorher etwas umspringt. Gespeicherte Szene halten + Instrumente muten ändert sie. CLEAR + Szene löscht sie. SHIFT + Step 13–16 wählt den Fill-In.
 - [ ] D7 Kopieren (SHIFT + Quelle, SHIFT + Ziel) und Löschen (CLEAR + Pattern 2×).
 - [ ] D8 Toms (I/F-VAR + 4/5/6), Congas (SHIFT + 4/5/6).
 - [ ] D9 Aufnahme (I/F-VAR + TAP): Einspielen landet auf dem richtigen 16tel, kein Doppelschlag.
