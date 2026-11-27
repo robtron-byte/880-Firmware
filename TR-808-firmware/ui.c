@@ -90,6 +90,7 @@ static uint8_t copy_src = NONE, copy_src_bank;
 static uint8_t del_armed = NONE;
 static uint16_t del_armed_t;
 static uint16_t prev_loop_mask = 0;
+static uint8_t pad_inst[NUM_STEPS]; //PERFORM pads: voice of each pad (set on press, SHIFT = alternate voice)
 /* scene key in the pattern layer (PERFORM):
  * press = recall right away; held longer than 0.4 s = the mutes from before the press come back and go into
  * the scene, mutes changed while it is held are added, stored when the key is released */
@@ -103,6 +104,7 @@ void ui_init(void) {
 	TIMSK4 |= (1<<OCIE4A);
 	sequencer.inst_layer = INST_LAYER_MUTE;
 	sequencer.step_layer = STEP_LAYER_LOOP;
+	for (uint8_t k = 1; k < BASIC_RHYTHM; k++) pad_inst[k] = k - 1; //pads 2-12 = BD..CH
 }
 
 static uint8_t any_other_key_down(uint8_t self) {
@@ -259,6 +261,49 @@ static void live_hit(uint8_t inst) {
 		write_hit(part, step, inst);
 		if (d != TAP_CURRENT_SOUNDED && inst != AC) sequencer.skip_mask |= (1u << inst); //already heard now
 	}
+}
+
+/* ---------- PERFORM, I/F-VAR on B: step keys 1-12 are pads, 13-16 mute scenes ----------
+ * pad 1 = accent (held: repeats are accented), pads 2-12 = BD..CH, SHIFT + pad 4-8 = LC/MC/HC/CL/MA.
+ * holding a pad plays the voice on every 16th in time (note repeat). */
+static uint8_t pads_active(void) {
+	return perform() && sequencer.inst_layer == INST_LAYER_SELECT && !sequencer.pattern_layer;
+}
+
+static void pad_press(uint8_t k) {
+	if (k == 0) return; //accent pad: only while held
+	uint8_t d = k - 1;
+	if (sequencer.SHIFT && k >= 3 && k <= 7) {
+		m_shift.used = 1;
+		d += SW_DRUM_OFFSET;
+	}
+	pad_inst[k] = d;
+	if (!sequencer.START) {
+		trigger_drum(d, 0);
+		return;
+	}
+	uint8_t part, step;
+	if (locate_hit(&part, &step) == TAP_CURRENT_SOUNDED) {
+		trigger_drum(d, 0); //the step just played: sound now, repeats from the next step
+	} else {
+		pad_once_mask |= (1u << d); //belongs to the next step: plays there even if the pad is released before
+	}
+}
+
+/* held pads -> voices repeated on every step */
+static void update_pads(void) {
+	uint16_t mask = 0;
+	uint8_t acc = 0;
+	if (pads_active() && sequencer.START) {
+		uint16_t held = deb[4] | ((uint16_t)deb[3] << 8);
+		for (uint8_t k = 1; k < BASIC_RHYTHM; k++) {
+			if ((held >> k) & 1) mask |= (1u << pad_inst[k]);
+		}
+		acc = held & 1;
+	}
+	pad_repeat_mask = mask;
+	pad_accent = acc;
+	if (!sequencer.START) pad_once_mask = 0; //no late pad hit after a stop
 }
 
 /* TAP in EDIT: write the selected instrument to the nearest step of the edited part */
@@ -504,6 +549,16 @@ static void scene_service(void) {
 	scene_hold = NONE;
 }
 
+static void recall_scene(uint8_t n);
+static void scene_press(uint8_t k) {
+	if (scene_hold != NONE && ((raw_steps() >> scene_hold) & 1)) return; //one scene at a time (only while it is really held)
+	scene_hold = k;
+	scene_hold_t = now_t;
+	scene_storing = 0;
+	scene_prev_mutes = mute_mask();
+	recall_scene(k - BASIC_RHYTHM); //recall right away
+}
+
 static void recall_scene(uint8_t n) {
 	uint16_t mask = mute_scene[n];
 	if (mask == 0xFFFF) return; //never stored
@@ -605,12 +660,7 @@ static void pattern_layer_step(uint8_t k) {
 			m_shift.used = 1;
 			sequencer.current_intro_fill = k;
 		} else if (perform()) { //mute scenes: click = recall, hold = store (see scene_service)
-			if (scene_hold != NONE && ((raw_steps() >> scene_hold) & 1)) return; //one scene at a time (only while it is really held)
-			scene_hold = k;
-			scene_hold_t = now_t;
-			scene_storing = 0;
-			scene_prev_mutes = mute_mask();
-			recall_scene(k - BASIC_RHYTHM); //recall right away
+			scene_press(k);
 		} else { //EDIT: intro/fill patterns 13-16 can be selected for editing
 			sequencer.current_intro_fill = k;
 			sequencer.chain_active = 0;
@@ -671,9 +721,9 @@ static void edit_step_release(void) {
 	if (!hs_mask) hs_reset();
 }
 
-/* PERFORM: step keys set steps in the STEPS layer, and always while the instrument keys select (I/F-VAR) */
+/* PERFORM: step keys set steps in the STEPS layer (I/F-VAR on A) */
 static uint8_t perform_steps(void) {
-	return sequencer.step_layer == STEP_LAYER_STEPS || sequencer.inst_layer == INST_LAYER_SELECT;
+	return sequencer.step_layer == STEP_LAYER_STEPS;
 }
 
 static void handle_step_keys(void) {
@@ -744,11 +794,20 @@ static void handle_step_keys(void) {
 					pattern_request(k, sequencer.new_bank);
 				}
 			}
+		} else if (pads_active()) { //PERFORM, I/F-VAR on B: pads and mute scenes
+			if (k < BASIC_RHYTHM) {
+				pad_press(k);
+			} else if (sequencer.SHIFT) { //SHIFT + 13-16: fill-in for TAP
+				m_shift.used = 1;
+				sequencer.current_intro_fill = k;
+			} else {
+				scene_press(k);
+			}
 		} else { //PERFORM
 			if (sequencer.SHIFT) {
 				m_shift.used = 1;
 				update_shuffle(k);
-			} else if (!sequencer.START && sequencer.inst_layer != INST_LAYER_SELECT) {
+			} else if (!sequencer.START) {
 				if (k < BASIC_RHYTHM) {
 					pattern_request(k, sequencer.new_bank);
 				} else {
@@ -818,7 +877,7 @@ static void handle_clicks(void) {
 
 static void update_loop(void) {
 	uint16_t mask = 0;
-	if (perform() && sequencer.START && !perform_steps() && !sequencer.pattern_layer
+	if (perform() && sequencer.START && !perform_steps() && !pads_active() && !sequencer.pattern_layer
 		&& !raw_down(BASIC_VAR_SW) && !sequencer.ALT && !sequencer.SHIFT) {
 		mask = deb[4] | ((uint16_t)deb[3] << 8);
 	}
@@ -894,7 +953,18 @@ static void render_steps(uint8_t blink, uint8_t fast) {
 			m = 1u << sequencer.new_shuffle_amount;
 		}
 		if (!sequencer.START && IS_EDIT(sequencer.mode) && sequencer.din_reset_enable) m |= 1u << DIN_RESET_STEP;
-	} else if (sequencer.pattern_layer || (!sequencer.START && !(perform() && sequencer.inst_layer == INST_LAYER_SELECT))) {
+	} else if (pads_active() && !sequencer.SHIFT) {
+		//pads: held pads and voices that just played; scenes: stored = on, empty = short flash every 2 s
+		m = (deb[4] | ((uint16_t)deb[3] << 8)) & 0x0FFF;
+		m |= (inst_flash_mask & 0x07FF) << 1; //BD..CH -> pads 2-12
+		m |= ((inst_flash_mask >> SW_DRUM_OFFSET) & 0x7C) << 1; //LC..MA -> pads 4-8
+		for (uint8_t n = 0; n < 4; n++) {
+			if (mute_scene[n] != 0xFFFF || (now_t % 200) < 8) m |= 1u << (BASIC_RHYTHM + n);
+		}
+		if (scene_hold != NONE && scene_storing) {
+			if (fast) m |= (1u << scene_hold); else m &= ~(1u << scene_hold);
+		}
+	} else if (sequencer.pattern_layer || !sequencer.START) {
 		//pattern display
 		if (sequencer.chain_active && perform()) {
 			uint8_t lo = sequencer.chain_start < sequencer.chain_end ? sequencer.chain_start : sequencer.chain_end;
@@ -1016,6 +1086,7 @@ void ui_service(void) {
 		hs_reset();
 	}
 	scene_service();
+	update_pads();
 	handle_clicks();
 	if (press(IF_VAR_SW)) {} //handled as modifier / click
 	if (press(WRITE_SW)) {

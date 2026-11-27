@@ -88,12 +88,24 @@ Der Song-Modus ist entfernt.
 | Low/Mid/Hi **Conga**, Claves, Maracas spielen | **SHIFT halten + Instrument 4 / 5 / 6 / 7 / 8** |
 
 ### Step-Tasten
-**SHIFT klicken** wechselt zwischen **LOOP** und **STEPS SETZEN**. Beim Wechsel nach PERFORM ist LOOP aktiv. **Steht I/F-VAR auf AUSWAHL, setzen die Step-Tasten immer Steps** (auch bei gestopptem Sequencer); die gesetzten Steps des gewählten Instruments leuchten.
+**SHIFT klicken** wechselt zwischen **LOOP** und **STEPS SETZEN** (gilt, solange I/F-VAR auf MUTE steht). Beim Wechsel nach PERFORM ist LOOP aktiv.
+
+**Steht I/F-VAR auf AUSWAHL (LED B), werden die Step-Tasten zu Pads und Mute-Szenen:**
+
+| Funktion | Tasten | Hinweis |
+|---|---|---|
+| Instrument spielen | **Step 2–12** = BD, SD, LT, MT, HT, RS, CP, CB, CY, OH, CH | Anschlagen spielt sofort bzw. auf dem nächsten 16tel. **Halten = 16tel-Wirbel im Takt.** Mehrere Pads gleichzeitig gehen. Spielt auch, wenn das Instrument gemutet ist. |
+| Congas, Claves, Maracas | **SHIFT + Step 4–8** | |
+| Mit Accent | **Step 1 halten** + Pads | |
+| Mute-Szene abrufen / speichern | **Step 13–16** drücken / halten | wie in der Pattern-Ebene |
+| Fill-In wählen | **SHIFT + Step 13–16** | |
+
+Anzeige: Gehaltene Pads und gerade gespielte Instrumente leuchten. Mute-Szenen mit Inhalt leuchten, leere blitzen alle 2 Sekunden kurz auf. Steps setzen geht in PERFORM nur über STEPS SETZEN (I/F-VAR auf MUTE).
 
 | Funktion | Tasten | Hinweis |
 |---|---|---|
 | Step-Loop | LOOP: **Step halten** | wiederholt in 16teln; mehrere gehaltene Steps laufen in Step-Reihenfolge; Loslassen = nahtlos weiter |
-| Step setzen / löschen | STEPS SETZEN oder AUSWAHL: **Step 1–16** | für das gewählte Instrument, im gerade spielenden Part (gestoppt: 1st PART) |
+| Step setzen / löschen | STEPS SETZEN: **Step 1–16** | für das gewählte Instrument, im gerade spielenden Part (gestoppt: 1st PART) |
 | Shuffle | **SHIFT halten + Step 1–6** | |
 | Fill im nächsten Takt | **TAP** | Stopp: TAP schaltet das Intro um |
 

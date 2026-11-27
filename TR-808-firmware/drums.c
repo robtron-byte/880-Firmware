@@ -46,6 +46,8 @@ struct drum_hit drum_hit[17] = { //progmem?
 
 /* instruments whose trigger LED should flash (bit per enum drum, AC = bit 16 kept separately) */
 uint16_t inst_flash_mask = 0;
+uint16_t pad_repeat_mask = 0, pad_once_mask = 0;
+uint8_t pad_accent = 0;
 uint8_t accent_flash = 0;
 
 /* fixed trigger outputs: OUT 1 = Low Tom, OUT 2 = Low Conga (muted voices stay silent) */
@@ -149,9 +151,15 @@ void trigger_step(uint8_t part_playing) { //trigger all drums on the play step
 	}
 	if (played) any = 1;
 	ratchet_inst[0] &= played; ratchet_inst[1] &= played; ratchet_inst[2] &= played; //only voices that really play
+	uint16_t pads = (pad_repeat_mask | pad_once_mask) & ~played; //PERFORM pads (played even when muted)
+	pad_once_mask = 0;
+	for (uint8_t i = BD; i <= MA; i++) {
+		if ((pads >> i) & 1) set_voice(i);
+	}
+	if (pads) any = 1;
 	sequencer.skip_mask = 0;
 	ratchet_accent = 0;
-	if ((sequencer.pattern[var].accent[part_playing] >> step) & 1) {
+	if (((sequencer.pattern[var].accent[part_playing] >> step) & 1) || (pads && pad_accent)) {
 		spi_data[LATCH_8] |= 1<<ACCENT;
 		accent_flash = 1;
 		ratchet_accent = 1;
