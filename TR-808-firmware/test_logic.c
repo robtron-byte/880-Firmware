@@ -190,6 +190,10 @@ void test_attr_fast_paths(void) {
 	attr_set(&a, attr_key(0, 0, 3, 5), 4, 2); /* other variation */
 	TEST_ASSERT_EQUAL_HEX16((1 << 3) | (1 << 9), attr_inst_steps(&a, 0, 1, 5));
 	TEST_ASSERT_EQUAL_HEX16(1 << 3, attr_inst_steps(&a, 0, 1, 7));
+	uint16_t om, rm;
+	attr_inst_masks(&a, 0, 1, 5, &om, &rm);
+	TEST_ASSERT_EQUAL_HEX16(1 << 3, om);
+	TEST_ASSERT_EQUAL_HEX16(1 << 9, rm);
 	uint16_t skip, rat[3];
 	attr_step_masks(&a, 0, 1, 3, 1, &skip, rat); /* pass 1: odds 2 skips */
 	TEST_ASSERT_EQUAL_HEX16(1 << 5, skip);

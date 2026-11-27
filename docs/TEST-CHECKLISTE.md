@@ -16,7 +16,7 @@ Rückweg jederzeit: [Original-Firmware aufspielen](UPDATE-ANLEITUNG.md#wenn-etwa
 - [ ] B2 TAP-Einspielen landet auf dem erwarteten Step (knapp davor und knapp danach probieren).
 - [ ] B3 CLEAR klicken löscht nur das Instrument, CLEAR zweimal das ganze Pattern.
 - [ ] B4 Länge: CLEAR + Step. I/F-VAR + MODE: 2nd PART ist eine Kopie, ohne Änderung wieder raus = weg.
-- [ ] B5 Ratchet: Step halten + TAP (1×–4×), Odds: Step halten + SHIFT – hörbar richtig? Nur halten zeigt beide Werte im Wechsel; solche Steps gehen in der Step-Reihe einmal pro Sekunde ganz kurz aus.
+- [ ] B5 Ratchet: Step halten + TAP (1×–4×), Odds: Step halten + SHIFT – hörbar richtig? Zwei Steps gleichzeitig halten + TAP/SHIFT ändert beide. Nur halten zeigt beide Werte im Wechsel. In der Step-Reihe flackern solche Steps einmal pro Sekunde: 1× = Odds, 2× = Ratchet, 3× = beides.
 - [ ] B6 SHIFT + CLEAR kopiert Variation A nach B. PRE-SCALE-LEDs zählen beim Abspielen 1–2–3–4.
 - [ ] B7 Änderungen sind nach Pattern-Wechsel und nach Aus/Ein gespeichert.
 

@@ -75,9 +75,15 @@ static struct modkey *const mods[4] = {&m_shift, &m_alt, &m_bvar, &m_clear};
 
 /* ---------- UI state ---------- */
 static uint8_t prev_mode = FIRST_PART; //mode to return to from PATTERN CLEAR
-static uint8_t hs_step = NONE; //EDIT: held step (odds/ratchet editing)
-static uint8_t hs_was_on, hs_adjusted, hs_show_odds, hs_seen;
+static uint8_t hs_step = NONE; //EDIT: first held step (shown on the PRE-SCALE LEDs)
+static uint16_t hs_mask, hs_was_on, hs_seen; //all held steps, which of them were set before, debounced
+static uint8_t hs_adjusted, hs_show_odds;
 static uint16_t hs_t;
+
+static void hs_reset(void) {
+	hs_step = NONE;
+	hs_mask = hs_was_on = hs_seen = 0;
+}
 static uint16_t last_clear_click = 0;
 static uint8_t clear_flash = 0; //blink after a clear
 static uint16_t clear_flash_t;
@@ -301,27 +307,37 @@ static void handle_mode_key(void) {
 	} else {
 		set_mode(FIRST_PART);
 	}
-	hs_step = NONE;
+	hs_reset();
 }
 
+/* held step(s) + TAP (ratchet) / SHIFT (odds): all held steps that are set get the new value */
 static void cycle_attr(uint8_t ratchet) {
 	uint8_t part = sequencer.part_editing, v = sequencer.current_variation;
-	if (sequencer.current_inst == AC || hs_step == NONE) return;
-	if (!((sequencer.pattern[v].part[part][hs_step] >> sequencer.current_inst) & 1)) return;
-	uint16_t key = attr_key(part, v, hs_step, sequencer.current_inst);
-	uint8_t odds = attr_get_odds(&pattern_attrs, key);
-	uint8_t rat = attr_get_ratchet(&pattern_attrs, key);
-	if (ratchet) {
-		rat = rat % 4 + 1;
-	} else {
-		odds = odds % 4 + 1;
+	if (sequencer.current_inst == AC || !hs_mask) return;
+	uint16_t set = 0;
+	for (uint8_t k = 0; k < NUM_STEPS; k++) {
+		if ((hs_mask >> k) & 1 && (sequencer.pattern[v].part[part][k] >> sequencer.current_inst) & 1) set |= (1u << k);
 	}
-	if (attr_set(&pattern_attrs, key, odds, rat)) {
-		mark_part_edited(part);
-	} else {
-		clear_flash = 1; //list full: flash
+	if (!set) return;
+	uint8_t ref = (hs_step != NONE && ((set >> hs_step) & 1)) ? hs_step : loop_pick(set, 0);
+	uint16_t key = attr_key(part, v, ref, sequencer.current_inst);
+	uint8_t new_odds = attr_get_odds(&pattern_attrs, key) % 4 + 1;
+	uint8_t new_rat = attr_get_ratchet(&pattern_attrs, key) % 4 + 1;
+	uint8_t ok = 1;
+	for (uint8_t k = 0; k < NUM_STEPS; k++) {
+		if (!((set >> k) & 1)) continue;
+		key = attr_key(part, v, k, sequencer.current_inst);
+		uint8_t odds = attr_get_odds(&pattern_attrs, key);
+		uint8_t rat = attr_get_ratchet(&pattern_attrs, key);
+		if (ratchet) rat = new_rat; else odds = new_odds;
+		if (!attr_set(&pattern_attrs, key, odds, rat)) ok = 0;
+	}
+	mark_part_edited(part);
+	if (!ok) { //list full: flash
+		clear_flash = 1;
 		clear_flash_t = now_t;
 	}
+	hs_step = ref;
 	hs_adjusted = 1;
 	hs_show_odds = !ratchet;
 }
@@ -329,7 +345,7 @@ static void cycle_attr(uint8_t ratchet) {
 static void handle_tap(void) {
 	if (!flag.tap) return;
 	flag.tap = 0;
-	if (IS_EDIT(sequencer.mode) && hs_step != NONE) { //held step + TAP: ratchet
+	if (IS_EDIT(sequencer.mode) && hs_mask) { //held step(s) + TAP: ratchet
 		cycle_attr(1);
 		return;
 	}
@@ -591,36 +607,47 @@ static void edit_step_press(uint8_t k) {
 	} else {
 		on = (sequencer.pattern[v].part[part][k] >> sequencer.current_inst) & 1;
 	}
-	hs_step = k;
-	hs_was_on = on;
-	hs_adjusted = 0;
-	hs_show_odds = 0;
-	hs_seen = 0;
+	if (!hs_mask) { //new hold: start fresh
+		hs_adjusted = 0;
+		hs_show_odds = 0;
+		hs_step = k;
+	}
+	uint16_t bit = 1u << k;
+	hs_mask |= bit;
+	hs_seen &= ~bit;
+	if (on) hs_was_on |= bit; else hs_was_on &= ~bit;
 	hs_t = now_t;
 	if (!on) write_hit(part, k, sequencer.current_inst);
 }
 
 static void edit_step_release(void) {
-	if (hs_step == NONE) return;
-	uint8_t k = hs_step;
+	if (!hs_mask) return;
 	uint16_t steps_deb = deb[4] | ((uint16_t)deb[3] << 8);
-	if (steps_deb & (1u << k)) { //still held
-		hs_seen = 1;
-		return;
-	}
-	//not released yet if the debounced level has not even seen the press (very short tap: allow 50 ms)
-	if (!hs_seen && ((uint16_t)(now_t - hs_t) < 5 || (raw_steps() & (1u << k)))) return;
-	hs_step = NONE;
-	if (!hs_was_on || hs_adjusted) return;
+	uint16_t steps_raw = raw_steps();
 	uint8_t part = sequencer.part_editing, v = sequencer.current_variation;
-	if (sequencer.current_inst == AC) {
-		sequencer.pattern[v].accent[part] &= ~(1u << k);
-	} else {
-		sequencer.pattern[v].part[part][k] &= ~(1u << sequencer.current_inst);
-		attr_set(&pattern_attrs, attr_key(part, v, k, sequencer.current_inst), 1, 1);
+	for (uint8_t k = 0; k < NUM_STEPS; k++) {
+		uint16_t bit = 1u << k;
+		if (!(hs_mask & bit)) continue;
+		if (steps_deb & bit) { //still held
+			hs_seen |= bit;
+			continue;
+		}
+		//not released yet if the debounced level has not even seen the press (very short tap: allow 50 ms)
+		if (!(hs_seen & bit) && ((uint16_t)(now_t - hs_t) < 5 || (steps_raw & bit))) continue;
+		hs_mask &= ~bit;
+		if ((hs_was_on & bit) && !hs_adjusted) { //a set step pressed and released without TAP/SHIFT: clear it
+			if (sequencer.current_inst == AC) {
+				sequencer.pattern[v].accent[part] &= ~bit;
+			} else {
+				sequencer.pattern[v].part[part][k] &= ~(1u << sequencer.current_inst);
+				attr_set(&pattern_attrs, attr_key(part, v, k, sequencer.current_inst), 1, 1);
+			}
+			mark_part_edited(part);
+			update_inst_led_mask();
+		}
+		if (hs_step == k) hs_step = hs_mask ? loop_pick(hs_mask, 0) : NONE;
 	}
-	mark_part_edited(part);
-	update_inst_led_mask();
+	if (!hs_mask) hs_reset();
 }
 
 static void handle_step_keys(void) {
@@ -805,19 +832,23 @@ static uint16_t inst_mask_for(uint8_t part) {
 	return m;
 }
 
-/* steps of the selected instrument that have odds or a ratchet set */
-static uint16_t attr_mask_for(uint8_t part) {
-	if (sequencer.current_inst == AC) return 0;
-	return attr_inst_steps(&pattern_attrs, part, sequencer.current_variation, sequencer.current_inst);
-}
 
-/* instrument steps; steps with odds/ratchets go dark for 120 ms once per second.
- * The rhythm is fixed (not tied to the tempo), slower than every other blink and mostly on,
- * so it stays readable while the running light passes without drawing attention. */
+/* instrument steps; steps with odds/ratchets flicker once per second (fixed rhythm, not the tempo):
+ *   odds only: 1 short dip, ratchet only: 2 dips, odds and ratchet: 3 dips (80 ms each, 80 ms apart),
+ * the rest of the second the step is lit, so the marks stay calm while the pattern runs. */
 static uint16_t marked_mask_for(uint8_t part) {
 	uint16_t m = inst_mask_for(part);
-	if ((now_t % 100) < 12) m &= ~attr_mask_for(part);
-	return m;
+	if (sequencer.current_inst == AC) return m;
+	uint8_t p = now_t % 100;
+	if (p >= 40 || (p % 16) >= 8) return m; //outside the dips
+	uint16_t odds_m, rat_m;
+	attr_inst_masks(&pattern_attrs, part, sequencer.current_variation, sequencer.current_inst, &odds_m, &rat_m);
+	uint16_t both = odds_m & rat_m;
+	uint16_t dark;
+	if (p < 8) dark = odds_m | rat_m;          //1st dip: everything marked
+	else if (p < 24) dark = rat_m;             //2nd dip: ratchet (alone or with odds)
+	else dark = both;                          //3rd dip: odds and ratchet
+	return m & ~dark;
 }
 
 static void render_steps(uint8_t blink, uint8_t fast) {
@@ -836,7 +867,7 @@ static void render_steps(uint8_t blink, uint8_t fast) {
 		m = 1u << (BASIC_RHYTHM + attr_direction(&pattern_attrs));
 	} else if (hs_step != NONE) {
 		m = inst_mask_for(sequencer.part_editing);
-		if (fast) m ^= (1u << hs_step);
+		if (fast) m ^= hs_mask; //all held steps blink
 	} else if (sequencer.SHIFT && sequencer.mode == PATTERN_CLEAR) {
 		if (sequencer.din_reset_enable) m = 1u << DIN_RESET_STEP;
 	} else if (sequencer.SHIFT && !(sequencer.pattern_layer && perform())) {
@@ -968,12 +999,12 @@ void ui_service(void) {
 	if (IS_EDIT(sequencer.mode)) {
 		edit_step_release();
 	} else {
-		hs_step = NONE;
+		hs_reset();
 	}
 	handle_clicks();
 	if (press(IF_VAR_SW)) {} //handled as modifier / click
 	if (press(WRITE_SW)) {
-		if (IS_EDIT(sequencer.mode) && hs_step != NONE) { //held step + SHIFT: odds
+		if (IS_EDIT(sequencer.mode) && hs_mask) { //held step(s) + SHIFT: odds
 			m_shift.used = 1;
 			cycle_attr(0);
 		}

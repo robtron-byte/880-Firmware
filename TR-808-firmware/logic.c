@@ -232,6 +232,18 @@ uint16_t attr_inst_steps(const struct attr_block *a, uint8_t part, uint8_t var, 
 	return m;
 }
 
+void attr_inst_masks(const struct attr_block *a, uint8_t part, uint8_t var, uint8_t inst, uint16_t *odds_m, uint16_t *ratchet_m) {
+	*odds_m = *ratchet_m = 0;
+	uint16_t want = attr_key(part, var, 0, inst);
+	for (uint8_t i = 0; i < attr_count(a); i++) {
+		uint16_t e = a->entry[i];
+		if ((e & ATTR_KEY_MASK & ~0x0F) != want) continue;
+		uint16_t bit = 1u << (e & 0x0F);
+		if ((e >> 10) & 0x03) *odds_m |= bit;
+		if ((e >> 12) & 0x03) *ratchet_m |= bit;
+	}
+}
+
 void attr_step_masks(const struct attr_block *a, uint8_t part, uint8_t var, uint8_t step, uint8_t pass,
 	uint16_t *odds_skip, uint16_t ratchet[3]) {
 	*odds_skip = 0;

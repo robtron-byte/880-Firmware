@@ -36,7 +36,7 @@ Firmware für die **System80 880 Desktop (MK2)**, die live mit einer Hand gespie
 | Fill im nächsten Takt (PERFORM) | **TAP** |
 | Live aufnehmen an/aus (PERFORM) | **I/F-VAR halten + TAP** |
 | Pattern auf den Stand beim Auswählen zurücksetzen | **SHIFT + TAP** |
-| Ratchet / Odds eines Steps (EDIT) | **Step halten + TAP** / **Step halten + SHIFT** |
+| Ratchet / Odds eines oder mehrerer Steps (EDIT) | **Step(s) halten + TAP** / **Step(s) halten + SHIFT** |
 
 ---
 
@@ -130,8 +130,8 @@ Gespeichert wird **immer automatisch am Taktende**.
 | Step löschen | **gesetzten Step drücken und loslassen** | gelöscht wird beim Loslassen |
 | Accent | **Instrument 1**, dann Steps | |
 | Odds und Ratchet **ansehen** | **gesetzten Step halten** | PRE-SCALE-LEDs zeigen im Wechsel (je ½ s): Ratchet = LED leuchtet, Odds = LED blinkt. Nichts wird verändert. |
-| Ratchet 1× → 2× → 3× → 4× | **gesetzten Step halten + TAP** | danach zeigen die LEDs nur noch den Ratchet (leuchtet) |
-| Odds: jeder 1./2./3./4. Durchlauf | **gesetzten Step halten + SHIFT** | danach zeigen die LEDs nur noch die Odds (blinkt) |
+| Ratchet 1× → 2× → 3× → 4× | **gesetzten Step halten + TAP** (auch mehrere Steps gleichzeitig halten: alle bekommen denselben Wert) | danach zeigen die LEDs nur noch den Ratchet (leuchtet) |
+| Odds: jeder 1./2./3./4. Durchlauf | **gesetzten Step halten + SHIFT** (auch mehrere Steps gleichzeitig: alle bekommen denselben Wert) | danach zeigen die LEDs nur noch die Odds (blinkt) |
 | Tap-Write | **TAP** im Takt | wird auf den nächsten 16tel gerundet |
 | Pattern-Länge (gilt für beide Parts) | **CLEAR halten + Step** im 1st PART | |
 | 2nd PART entfernen | **CLEAR halten + Step 1** im 2nd PART | |
@@ -143,7 +143,7 @@ Gespeichert wird **immer automatisch am Taktende**.
 | Alle Mutes aufheben | **CLEAR + Instrument 1** | |
 | Solo | **CLEAR + Instrument** | wie bisher |
 
-Die **PRE-SCALE-LEDs 1–4 zählen die Durchläufe** des Patterns, solange es läuft. Daran siehst du, wann Steps mit Odds „jeder 2./3./4. Durchlauf“ dran sind: Sie spielen bei LED 1, „jeder 2.“ auch bei LED 3. **Steps mit Odds oder Ratchet** erkennst du in der Step-Reihe daran, dass sie einmal pro Sekunde ganz kurz ausgehen (ca. 0,1 s aus, 0,9 s an – unabhängig vom Tempo, auch während das Pattern läuft) (gilt für das gewählte Instrument, in EDIT und in PERFORM bei STEPS SETZEN). Odds und Ratchets: höchstens **31 Steps pro Pattern** (beide Parts und Variationen zusammen). Ist die Liste voll, blinken die Steps kurz.
+Die **PRE-SCALE-LEDs 1–4 zählen die Durchläufe** des Patterns, solange es läuft. Daran siehst du, wann Steps mit Odds „jeder 2./3./4. Durchlauf“ dran sind: Sie spielen bei LED 1, „jeder 2.“ auch bei LED 3. **Steps mit Odds oder Ratchet** erkennst du in der Step-Reihe daran, dass sie einmal pro Sekunde ganz kurz flackern – unabhängig vom Tempo, auch während das Pattern läuft: **1× kurz aus = Odds**, **2× kurz aus = Ratchet**, **3× kurz aus = Odds und Ratchet**. Den Rest der Sekunde leuchten sie normal (gilt für das gewählte Instrument, in EDIT und in PERFORM bei STEPS SETZEN). Odds und Ratchets: höchstens **31 Steps pro Pattern** (beide Parts und Variationen zusammen). Ist die Liste voll, blinken die Steps kurz.
 
 ---
 
