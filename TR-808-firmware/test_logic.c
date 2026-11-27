@@ -175,6 +175,38 @@ void test_attr_copy_var(void) {
 	TEST_ASSERT_EQUAL_UINT8(3, attr_get_ratchet(&a, attr_key(0, 0, 1, 3)));
 }
 
+void test_attr_fast_paths(void) {
+	struct attr_block a;
+	attr_clear(&a);
+	attr_set(&a, attr_key(0, 1, 3, 5), 2, 1);
+	attr_set(&a, attr_key(0, 1, 9, 5), 1, 3);
+	attr_set(&a, attr_key(0, 1, 3, 7), 1, 4);
+	attr_set(&a, attr_key(1, 1, 3, 5), 3, 2); /* other part */
+	attr_set(&a, attr_key(0, 0, 3, 5), 4, 2); /* other variation */
+	TEST_ASSERT_EQUAL_HEX16((1 << 3) | (1 << 9), attr_inst_steps(&a, 0, 1, 5));
+	TEST_ASSERT_EQUAL_HEX16(1 << 3, attr_inst_steps(&a, 0, 1, 7));
+	uint16_t skip, rat[3];
+	attr_step_masks(&a, 0, 1, 3, 1, &skip, rat); /* pass 1: odds 2 skips */
+	TEST_ASSERT_EQUAL_HEX16(1 << 5, skip);
+	TEST_ASSERT_EQUAL_HEX16(0, rat[0]);
+	TEST_ASSERT_EQUAL_HEX16(0, rat[1]);
+	TEST_ASSERT_EQUAL_HEX16(1 << 7, rat[2]);
+	attr_step_masks(&a, 0, 1, 3, 2, &skip, rat);
+	TEST_ASSERT_EQUAL_HEX16(0, skip);
+	/* the fast paths agree with the single lookups for every cell */
+	for (uint8_t part = 0; part < 2; part++) for (uint8_t var = 0; var < 2; var++) for (uint8_t step = 0; step < 16; step++) {
+		for (uint8_t pass = 0; pass < 4; pass++) {
+			attr_step_masks(&a, part, var, step, pass, &skip, rat);
+			for (uint8_t inst = 0; inst < 16; inst++) {
+				uint16_t k = attr_key(part, var, step, inst);
+				TEST_ASSERT_EQUAL_UINT8(!odds_play(attr_get_odds(&a, k), pass), (skip >> inst) & 1);
+				uint8_t r = attr_get_ratchet(&a, k);
+				for (uint8_t n = 2; n <= 4; n++) TEST_ASSERT_EQUAL_UINT8(r == n, (rat[n - 2] >> inst) & 1);
+			}
+		}
+	}
+}
+
 /* ---- odds / ratchets ---- */
 void test_odds(void) {
 	for (uint8_t p = 0; p < 12; p++) {
@@ -214,6 +246,7 @@ int main(void) {
 	RUN_TEST(test_attr_copy_part);
 	RUN_TEST(test_attr_validate_and_direction);
 	RUN_TEST(test_attr_copy_var);
+	RUN_TEST(test_attr_fast_paths);
 	RUN_TEST(test_odds);
 	RUN_TEST(test_ratchet_ticks);
 	return UNITY_END();

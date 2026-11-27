@@ -81,6 +81,13 @@ void attr_copy_var(struct attr_block *a, uint8_t src, uint8_t dst);
 /* copy all entries of part `src` to part `dst` (dst entries are replaced) */
 void attr_copy_part(struct attr_block *a, uint8_t src, uint8_t dst);
 
+/* fast paths (one scan of the list instead of one lookup per instrument/step) */
+/* bit per step: steps of this instrument that have odds or a ratchet */
+uint16_t attr_inst_steps(const struct attr_block *a, uint8_t part, uint8_t var, uint8_t inst);
+/* for one step: instruments silenced by their odds on this pass, and instruments with 2/3/4 ratchet hits */
+void attr_step_masks(const struct attr_block *a, uint8_t part, uint8_t var, uint8_t step, uint8_t pass,
+	uint16_t *odds_skip, uint16_t ratchet[3]);
+
 /* does a step with the given odds play on this pass? */
 uint8_t odds_play(uint8_t odds, uint8_t pass);
 /* ppqn tick (0..divider-1) of the k-th ratchet hit (k = 1..n-1) */

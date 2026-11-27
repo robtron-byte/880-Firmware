@@ -217,6 +217,32 @@ void attr_copy_var(struct attr_block *a, uint8_t src, uint8_t dst) {
 	}
 }
 
+uint16_t attr_inst_steps(const struct attr_block *a, uint8_t part, uint8_t var, uint8_t inst) {
+	uint16_t m = 0;
+	uint16_t want = attr_key(part, var, 0, inst); //step bits 0
+	for (uint8_t i = 0; i < attr_count(a); i++) {
+		uint16_t e = a->entry[i];
+		if ((e & ATTR_KEY_MASK & ~0x0F) == want) m |= (1u << (e & 0x0F));
+	}
+	return m;
+}
+
+void attr_step_masks(const struct attr_block *a, uint8_t part, uint8_t var, uint8_t step, uint8_t pass,
+	uint16_t *odds_skip, uint16_t ratchet[3]) {
+	*odds_skip = 0;
+	ratchet[0] = ratchet[1] = ratchet[2] = 0;
+	uint16_t want = attr_key(part, var, step, 0); //instrument bits 0
+	for (uint8_t i = 0; i < attr_count(a); i++) {
+		uint16_t e = a->entry[i];
+		if ((e & 0x3F) != want) continue; //step, part and variation must match
+		uint8_t inst = (e >> 6) & 0x0F;
+		uint8_t odds = ((e >> 10) & 0x03) + 1;
+		uint8_t rat = ((e >> 12) & 0x03) + 1;
+		if (!odds_play(odds, pass)) *odds_skip |= (1u << inst);
+		if (rat > 1) ratchet[rat - 2] |= (1u << inst);
+	}
+}
+
 uint8_t odds_play(uint8_t odds, uint8_t pass) {
 	if (odds <= 1) return 1;
 	return (pass % odds) == 0;

@@ -13,6 +13,8 @@
 #include <avr/wdt.h>
 #include "sequencer.h"
 #include "clock.h"
+#include "ui.h"
+#include <util/atomic.h>
 #include "twi_eeprom.h"
 #include "twi.h"
 #include "hardware.h"
@@ -171,7 +173,8 @@ void write_pattern_page(uint16_t memory_address, uint8_t bank, pattern_data *w_d
 	TWI_master_start_write_pattern(     EEPROM_DEVICE_ID,       // device address of eeprom chip
 	2 + bytes_to_write
 	);
-	while(TWI_busy); //added by omar to protect twi buffer
+	//880 Perform: no waiting here. The transfer (and the NACK retries during the EEPROM write cycle)
+	//runs in the TWI interrupt; every other TWI user waits for TWI_busy before touching the buffer.
 }
 
 void eeprom_read_recall_data() {
@@ -298,6 +301,27 @@ void attr_write(uint8_t slot, const struct attr_block *a) {
 	eeprom_write_block_blocking(attr_addr(slot), a, ATTR_BYTES);
 }
 
+/* EEPROM write cycle: a read right after a write would wait up to 5 ms (NACK retries).
+ * Background reads are only started 20 ms after the last background write. */
+static uint16_t last_write_t;
+static uint16_t ticks_now(void) {
+	uint16_t t;
+	ATOMIC_BLOCK(ATOMIC_RESTORESTATE) { t = ui_ticks; }
+	return t;
+}
+static void mark_write(void) { last_write_t = ticks_now(); }
+static uint8_t read_settled(void) { return (uint16_t)(ticks_now() - last_write_t) >= 2; }
+
+/* start a write and return; completion (and retries) happen in the TWI interrupt */
+static void attr_write_async(uint8_t slot, const struct attr_block *a) {
+	while(TWI_busy);
+	uint16_t addr = attr_addr(slot);
+	p_write_pattern->high_byte = addr >> 8;
+	p_write_pattern->low_byte = addr;
+	memcpy(TWI_buffer + 2, a, ATTR_BYTES);
+	TWI_master_start_write(EEPROM_DEVICE_ID, 2 + ATTR_BYTES);
+}
+
 void attr_queue_current(void) {
 	if (attr_write_pending && attr_write_slot != attr_slot(sequencer.current_pattern, sequencer.pattern_bank)) {
 		attr_write(attr_write_slot, &attr_to_write); //a different pattern is still queued: write it first
@@ -366,12 +390,15 @@ static void start_backup(void) {
 
 /* one EEPROM operation per call so the sequencer never stalls for long */
 void storage_service(void) {
+	if (TWI_busy) return; //previous transfer still running: never wait in the main loop
 	if (pattern_writer_busy()) {
 		write_next_pattern_page();
+		mark_write();
 		return;
 	}
 	if (attr_write_pending) {
-		attr_write(attr_write_slot, &attr_to_write);
+		mark_write();
+		attr_write_async(attr_write_slot, &attr_to_write);
 		attr_write_pending = 0;
 		return;
 	}
@@ -382,6 +409,7 @@ void storage_service(void) {
 	switch (job.stage) {
 		case 0: //pattern data into the pager buffer
 			if (job.type == JOB_COPY) {
+				if (!read_settled()) return;
 				read_pattern_into(&pattern_to_write, job.src_pattern*PAGES_PER_PATTERN*PAGE_SIZE, job.src_bank);
 			} else {
 				default_pattern_data(&pattern_to_write);
@@ -391,12 +419,14 @@ void storage_service(void) {
 			break;
 		case 1: //pager finished (checked above): attributes
 			if (job.type == JOB_COPY) {
+				if (!read_settled()) return;
 				eeprom_read_block_blocking(attr_addr(attr_slot(job.src_pattern, job.src_bank)), &attr_to_write, ATTR_BYTES);
 				attr_validate(&attr_to_write);
 			} else {
 				attr_clear(&attr_to_write);
 			}
-			attr_write(attr_slot(job.dst_pattern, job.dst_bank), &attr_to_write);
+			attr_write_async(attr_slot(job.dst_pattern, job.dst_bank), &attr_to_write);
+			mark_write();
 			if (job.dst_bank == BACKUP_BANK) {
 				backup_valid = (job.src_pattern == backup_pattern && job.src_bank == backup_bank);
 			} else if (job.dst_pattern == backup_pattern && job.dst_bank == backup_bank) {

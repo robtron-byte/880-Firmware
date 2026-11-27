@@ -782,13 +782,8 @@ static uint16_t inst_mask_for(uint8_t part) {
 
 /* steps of the selected instrument that have odds or a ratchet set */
 static uint16_t attr_mask_for(uint8_t part) {
-	uint16_t m = 0;
-	if (sequencer.current_inst == AC || attr_count(&pattern_attrs) == 0) return 0;
-	for (uint8_t i = 0; i < NUM_STEPS; i++) {
-		uint16_t key = attr_key(part, sequencer.current_variation, i, sequencer.current_inst);
-		if (attr_get_odds(&pattern_attrs, key) > 1 || attr_get_ratchet(&pattern_attrs, key) > 1) m |= (1u << i);
-	}
-	return m;
+	if (sequencer.current_inst == AC) return 0;
+	return attr_inst_steps(&pattern_attrs, part, sequencer.current_variation, sequencer.current_inst);
 }
 
 /* instrument steps; steps with odds/ratchets go dark for 120 ms once per second.

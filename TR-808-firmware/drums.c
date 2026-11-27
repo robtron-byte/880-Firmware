@@ -138,17 +138,17 @@ void trigger_step(uint8_t part_playing) { //trigger all drums on the play step
 	TIMSK0 |= (1<<OCIE0A); //enable output compare match A
 	TCCR0B |= (1<<CS00) | (1<<CS02); //set Timer0 clock divide to /1024
 	uint8_t any = 0;
+	uint16_t odds_skip;
+	attr_step_masks(&pattern_attrs, part_playing, var, step, sequencer.pass_count, &odds_skip, ratchet_inst);
+	data &= ~(odds_skip | sequencer.skip_mask); //odds: not this pass; skip: already played live while recording
+	uint16_t played = 0;
 	for (uint8_t i = BD; i <= MA; i++) {
-		if (!((data >> i) & 1)) continue;
-		if (sequencer.skip_mask & (1u << i)) continue; //already played live while recording
-		if (drum_hit[i].muted) continue;
-		uint16_t key = attr_key(part_playing, var, step, i);
-		if (!odds_play(attr_get_odds(&pattern_attrs, key), sequencer.pass_count)) continue;
-		uint8_t r = attr_get_ratchet(&pattern_attrs, key);
-		if (r > 1) ratchet_inst[r - 2] |= (1u << i);
+		if (!((data >> i) & 1) || drum_hit[i].muted) continue;
 		set_voice(i);
-		any = 1;
+		played |= (1u << i);
 	}
+	if (played) any = 1;
+	ratchet_inst[0] &= played; ratchet_inst[1] &= played; ratchet_inst[2] &= played; //only voices that really play
 	sequencer.skip_mask = 0;
 	ratchet_accent = 0;
 	if ((sequencer.pattern[var].accent[part_playing] >> step) & 1) {
