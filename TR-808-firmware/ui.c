@@ -92,13 +92,12 @@ static uint16_t del_armed_t;
 static uint16_t prev_loop_mask = 0;
 static uint8_t tap_reload_armed, tap_prev; //PERFORM: SHIFT + TAP = reload on release, unless something was played (= recording)
 static uint8_t pad_inst[NUM_STEPS]; //PERFORM pads: voice of each pad (set on press, SHIFT = alternate voice)
-/* scene keys 13-16 (PERFORM: pattern layer or I/F-VAR on B), everything happens on release:
- * released = recall (an empty scene clears all mutes); CLEAR + scene = delete it.
- * mutes changed while it is held = the mutes you hear are stored into it; an empty scene held for 1 s
- * stores the current mutes. Nothing changes while the key is down. */
-static uint8_t scene_hold = NONE, scene_storing, scene_was_empty;
-static uint16_t scene_hold_t, scene_base;
-#define SCENE_HOLD_TICKS 100 //1 s: a relaxed live press must not overwrite a scene
+/* scene keys 13-16 (PERFORM: pattern layer or I/F-VAR on B):
+ * press = recall right away; an empty scene switches all mutes off. CLEAR + scene = delete it.
+ * mutes changed while it is held = the mutes you hear are stored into it on release
+ * (no mutes at all = the scene stays/becomes empty). Holding without changes stores nothing. */
+static uint8_t scene_hold = NONE, scene_storing;
+static uint16_t scene_base;
 
 void ui_init(void) {
 	//Timer4: 10 ms tick (16 MHz / 1024 / 156), CTC mode set up in setup_clock()
@@ -566,14 +565,7 @@ static void save_scene(uint8_t n) {
 static void recall_scene(uint8_t n);
 /* scene key released: store or recall */
 static void scene_finish(void) {
-	uint8_t n = scene_hold - BASIC_RHYTHM;
-	if (scene_storing) {
-		save_scene(n);
-	} else if (scene_was_empty) {
-		apply_mutes(0); //empty scene: all mutes off
-	} else {
-		recall_scene(n);
-	}
+	if (scene_storing) save_scene(scene_hold - BASIC_RHYTHM);
 	scene_hold = NONE;
 }
 
@@ -582,12 +574,8 @@ static void scene_service(void) {
 	uint16_t steps = deb[4] | ((uint16_t)deb[3] << 8);
 	uint8_t held = ((steps >> scene_hold) & 1) || ((raw_steps() >> scene_hold) & 1);
 	if (held) {
-		if (!scene_storing) {
-			if (mute_mask() != scene_base) {
-				scene_storing = 1; //mutes changed while held: store on release (the step blinks fast)
-			} else if (scene_was_empty && (uint16_t)(now_t - scene_hold_t) >= SCENE_HOLD_TICKS) {
-				scene_storing = 1; //empty scene held 1 s: store the current mutes
-			}
+		if (!scene_storing && mute_mask() != scene_base) {
+			scene_storing = 1; //mutes changed while held: store on release (the step blinks fast)
 		}
 		return;
 	}
@@ -608,10 +596,13 @@ static void scene_press(uint8_t k) {
 		return;
 	}
 	scene_hold = k;
-	scene_hold_t = now_t;
 	scene_storing = 0;
-	scene_was_empty = mute_scene[n] == 0xFFFF;
-	scene_base = mute_mask(); //nothing changes until the key is released
+	if (mute_scene[n] == 0xFFFF) {
+		apply_mutes(0); //empty scene: all mutes off
+	} else {
+		recall_scene(n); //recall right away
+	}
+	scene_base = mute_mask();
 }
 
 static void recall_scene(uint8_t n) {
