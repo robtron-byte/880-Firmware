@@ -159,7 +159,12 @@ void trigger_step(uint8_t part_playing) { //trigger all drums on the play step
 	}
 	if (pads) any = 1;
 	if (pads && pad_record) { //record the pad hits on the step that is playing
+		uint16_t fresh = pads & ~sequencer.pattern[var].part[part_playing][step];
+		for (uint8_t i = BD; i <= MA; i++) { //new hits start without old odds/ratchets
+			if ((fresh >> i) & 1) attr_set(&pattern_attrs, attr_key(part_playing, var, step, i), 1, 1);
+		}
 		sequencer.pattern[var].part[part_playing][step] |= pads;
+		update_inst_led_mask();
 		if (pad_accent) sequencer.pattern[var].accent[part_playing] |= (1u << step);
 		flag.pattern_edit = 1;
 		if (part_playing == SECOND) sequencer.second_untouched = 0;

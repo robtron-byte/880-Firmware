@@ -90,7 +90,8 @@ static uint8_t copy_src = NONE, copy_src_bank;
 static uint8_t del_armed = NONE;
 static uint16_t del_armed_t;
 static uint16_t prev_loop_mask = 0;
-static uint8_t tap_reload_armed, tap_prev; //PERFORM: SHIFT + TAP = reload on release, unless something was played (= recording)
+static uint8_t tap_reload_armed, tap_fill; //PERFORM: SHIFT + TAP = reload on release unless something was recorded; fill set by this TAP press
+static uint16_t tap_arm_t;
 static uint8_t pad_inst[NUM_STEPS]; //PERFORM pads: voice of each pad (set on press, SHIFT = alternate voice)
 /* scene keys 13-16 (PERFORM: pattern layer or I/F-VAR on B):
  * press = recall right away; an empty scene switches all mutes off. CLEAR + scene = delete it.
@@ -257,7 +258,7 @@ static uint8_t locate_hit(uint8_t *part_out, uint8_t *step_out) {
 /* PERFORM instrument keys select only where it is needed: I/F-VAR on A with the step keys on STEPS SETZEN.
  * Everywhere else (A + LOOP, B = pads) they mute. */
 static uint8_t inst_keys_select(void) {
-	return sequencer.inst_layer == INST_LAYER_MUTE && sequencer.step_layer == STEP_LAYER_STEPS;
+	return sequencer.inst_layer == INST_LAYER_MUTE && sequencer.step_layer == STEP_LAYER_STEPS && !sequencer.pattern_layer;
 }
 
 /* PERFORM: SHIFT + TAP held while running = everything played is recorded */
@@ -267,8 +268,8 @@ static uint8_t rec_hold(void) {
 
 static void live_hit(uint8_t inst) {
 	if (inst != AC) trigger_drum(inst, 0);
-	tap_reload_armed = 0; //played something: SHIFT + TAP is a recording, no reload
 	if ((sequencer.recording || rec_hold()) && sequencer.START) {
+		tap_reload_armed = 0; //recorded something: SHIFT + TAP is a recording, no reload
 		uint8_t part, step;
 		uint8_t d = locate_hit(&part, &step);
 		write_hit(part, step, inst);
@@ -284,7 +285,7 @@ static uint8_t pads_active(void) {
 }
 
 static void pad_press(uint8_t k) {
-	tap_reload_armed = 0; //played something: SHIFT + TAP is a recording, no reload
+	if (rec_hold()) tap_reload_armed = 0; //recording: SHIFT + TAP is no reload
 	if (k == 0) return; //accent pad: only while held
 	uint8_t d = k - 1;
 	if (sequencer.SHIFT && !sequencer.TAP_HELD && k >= 3 && k <= 7) { //SHIFT + TAP = recording: no voice switch
@@ -315,10 +316,18 @@ static void update_pads(void) {
 	uint16_t mask = 0;
 	uint8_t acc = 0;
 	pad_record = pads_active() && rec_hold();
-	if (rec_hold()) flag.fill = 0; //TAP pressed before SHIFT: it is a recording, not a fill
-	if (tap_prev && !sequencer.TAP_HELD && tap_reload_armed) do_reload(); //SHIFT + TAP released without playing: reload
-	if (!sequencer.TAP_HELD) tap_reload_armed = 0;
-	tap_prev = sequencer.TAP_HELD;
+	if (rec_hold() && tap_fill) { //TAP pressed before SHIFT: it is a recording, not a fill
+		flag.fill = 0;
+		tap_fill = 0;
+	}
+	if (!sequencer.TAP_HELD) {
+		tap_fill = 0;
+		//released without recording: reload (50 ms after the press at the earliest, so a bouncing contact is no release)
+		if (tap_reload_armed && (uint16_t)(now_t - tap_arm_t) >= 5) {
+			tap_reload_armed = 0;
+			do_reload();
+		}
+	}
 	if (pads_active() && sequencer.START) {
 		uint16_t held = deb[4] | ((uint16_t)deb[3] << 8);
 		for (uint8_t k = 1; k < BASIC_RHYTHM; k++) {
@@ -433,6 +442,7 @@ static void handle_tap(void) {
 	if (sequencer.SHIFT && perform()) { //PERFORM: reload when TAP is released without playing anything
 		m_shift.used = 1;
 		tap_reload_armed = 1;
+		tap_arm_t = now_t;
 	} else if (sequencer.SHIFT) {
 		m_shift.used = 1;
 		do_reload();
@@ -447,6 +457,7 @@ static void handle_tap(void) {
 		}
 	} else if (perform()) {
 		if (sequencer.START) {
+			if (!flag.fill) tap_fill = 1; //this press asked for the fill (a recording may take it back)
 			flag.fill = 1; //fill in the next measure
 		} else { //stopped: toggle intro
 			if (!flag.intro) {
@@ -554,7 +565,7 @@ static void apply_mutes(uint16_t mask) {
 }
 
 static void save_scene(uint8_t n) {
-	uint16_t mask = mute_mask();
+	uint16_t mask = mute_mask() & 0x7FFF; //MA is muted together with CP: bit 15 is derived on recall, so 0xFFFF stays "empty"
 	mute_scene[n] = mask ? mask : 0xFFFF; //no mutes at all: the scene is empty again
 	scene_write(n);
 	clear_flash = 1;
@@ -608,6 +619,7 @@ static void scene_press(uint8_t k) {
 static void recall_scene(uint8_t n) {
 	uint16_t mask = mute_scene[n];
 	if (mask == 0xFFFF) return; //never stored
+	mask = (mask & 0x7FFF) | (((mask >> CP) & 1) << MA); //MA follows CP
 	apply_mutes(mask);
 }
 

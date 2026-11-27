@@ -483,7 +483,7 @@ void process_step(void){
 				sequencer.var_led_mask = led[BASIC_VAR_B_LED].spi_bit;
 				break;
 			}
-			if ((clock.beat_counter <2) && (!sequencer.SHIFT) && (!sequencer.TAP_HELD) && (!sequencer.ALT)) {
+			if ((clock.beat_counter <2) && (!sequencer.TAP_HELD) && (!sequencer.ALT)) {
 				if (sequencer.variation_mode == VAR_AB) sequencer.var_led_mask |= led[BASIC_VAR_B_LED].spi_bit;	//flash VAR_B LED to indicate A/B mode
 			}
 		}
