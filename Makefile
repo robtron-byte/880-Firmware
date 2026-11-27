@@ -55,11 +55,12 @@ $(TARGET).syx: $(TARGET).hex
 syx: $(TARGET).syx
 
 # every release goes up by 0.01: firmware/880-perform-v1.01.syx, v1.02, ... (firmware/RELEASE holds the number x100)
-# (older 880-perform files are deleted so only the newest one is in firmware/)
+# (the previous release is moved to firmware/archiv, so only the newest one is in firmware/)
 release: all test
 	@n=$$(( $$(cat firmware/RELEASE 2>/dev/null || echo 100) + 1 )); \
 	name=firmware/880-perform-v$$((n / 100)).$$(printf %02d $$((n % 100))).syx; \
-	find firmware -maxdepth 1 -name '880-perform*.syx' -delete; \
+	mkdir -p firmware/archiv; \
+	for f in firmware/880-perform-v*.syx; do [ -f "$$f" ] && mv "$$f" firmware/archiv/; done; \
 	cp $(TARGET).syx $$name; echo $$n > firmware/RELEASE; \
 	echo "Release: $$name"
 
