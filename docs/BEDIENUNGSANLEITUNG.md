@@ -152,7 +152,7 @@ Steps setzen, löschen und Odds/Ratchets einstellen geht in EDIT, **während der
 | Odds und Ratchet **ansehen** | **gesetzten Step halten** | PRE-SCALE-LEDs zeigen im Wechsel (je ½ s): Ratchet = LED leuchtet, Odds = LED blinkt. Nichts wird verändert. |
 | Ratchet 1× → 2× → 3× → 4× | **gesetzten Step halten + TAP** (auch mehrere Steps gleichzeitig halten: alle bekommen denselben Wert) | danach zeigen die LEDs nur noch den Ratchet (leuchtet) |
 | Odds: jeder 1./2./3./4. Durchlauf | **gesetzten Step halten + SHIFT** (auch mehrere Steps gleichzeitig: alle bekommen denselben Wert) | danach zeigen die LEDs nur noch die Odds (blinkt) |
-| Tap-Write | **TAP** im Takt | wird auf den nächsten 16tel gerundet |
+| Tap-Write | **TAP** im Takt | wird auf das nächste 16tel gerundet und landet dort, wo der Playhead gerade ist – auch im anderen Part (z. B. im 2nd PART, während du den 1st PART bearbeitest) |
 | Pattern-Länge (gilt für beide Parts) | **CLEAR halten + Step** im 1st PART | |
 | 2nd PART entfernen | **CLEAR halten + Step 1** im 2nd PART | |
 | Aktuelles Instrument löschen | **CLEAR klicken** | nur im Part, den du gerade bearbeitest (1st oder 2nd PART) |

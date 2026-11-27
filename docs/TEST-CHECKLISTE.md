@@ -13,7 +13,7 @@ Rückweg jederzeit: [Original-Firmware aufspielen](UPDATE-ANLEITUNG.md#wenn-etwa
 
 ## B. EDIT
 - [ ] B1 Steps setzen/löschen, Accent, Instrument wählen (Tom/Conga umschalten).
-- [ ] B2 TAP-Einspielen landet auf dem erwarteten Step (knapp davor und knapp danach probieren).
+- [ ] B2 TAP-Einspielen landet auf dem erwarteten Step (knapp davor und knapp danach probieren), auch im gerade spielenden anderen Part.
 - [ ] B3 CLEAR klicken löscht nur das Instrument und nur im aktuellen Part, CLEAR zweimal das ganze Pattern.
 - [ ] B4 Länge: CLEAR + Step. SHIFT + MODE: 2nd PART ist eine Kopie, ohne Änderung wieder raus = weg. Mit Änderung: MODE schaltet danach PERFORM → 1st → 2nd → PERFORM.
 - [ ] B5 Ratchet: Step halten + TAP (1×–4×), Odds: Step halten + SHIFT – hörbar richtig? Zwei Steps gleichzeitig halten + TAP/SHIFT ändert beide. Nur halten zeigt beide Werte im Wechsel. In der Step-Reihe flackern solche Steps einmal pro Sekunde: 1× = Odds, 2× = Ratchet, 3× = beides.

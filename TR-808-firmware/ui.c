@@ -341,14 +341,14 @@ static void update_pads(void) {
 	if (!sequencer.START) pad_once_mask = 0; //no late pad hit after a stop
 }
 
-/* TAP in EDIT: write the selected instrument to the nearest step of the edited part */
+/* TAP in EDIT: write the selected instrument to the nearest step where the playhead is
+ * (in the part that is playing, whether the 1st or the 2nd part is being edited) */
 static void tap_write(void) {
 	uint8_t part, step;
 	uint8_t d = locate_hit(&part, &step);
-	uint8_t edit = sequencer.part_editing;
-	if (sequencer.step_num[edit] > 15 || step > sequencer.step_num[edit]) return;
-	write_hit(edit, step, sequencer.current_inst);
-	if (d == TAP_CURRENT_SOUNDED && part == edit && sequencer.current_inst != AC) {
+	if (sequencer.step_num[part] > 15 || step > sequencer.step_num[part]) return;
+	write_hit(part, step, sequencer.current_inst);
+	if (d == TAP_CURRENT_SOUNDED && sequencer.current_inst != AC) {
 		trigger_drum(sequencer.current_inst, 0); //that step already played: let it sound now
 	}
 }
