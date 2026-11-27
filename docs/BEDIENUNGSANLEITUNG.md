@@ -129,8 +129,9 @@ Gespeichert wird **immer automatisch am Taktende**.
 | Step setzen | **Step drücken** | sofort |
 | Step löschen | **gesetzten Step drücken und loslassen** | gelöscht wird beim Loslassen |
 | Accent | **Instrument 1**, dann Steps | |
-| Ratchet 1× → 2× → 3× → 4× | **gesetzten Step halten + TAP** | Anzeige: PRE-SCALE-LEDs (leuchtet) |
-| Odds: jeder 1./2./3./4. Durchlauf | **gesetzten Step halten + SHIFT** | Anzeige: PRE-SCALE-LEDs (blinkt) |
+| Odds und Ratchet **ansehen** | **gesetzten Step halten** | PRE-SCALE-LEDs zeigen im Wechsel (je ½ s): Ratchet = LED leuchtet, Odds = LED blinkt. Nichts wird verändert. |
+| Ratchet 1× → 2× → 3× → 4× | **gesetzten Step halten + TAP** | danach zeigen die LEDs nur noch den Ratchet (leuchtet) |
+| Odds: jeder 1./2./3./4. Durchlauf | **gesetzten Step halten + SHIFT** | danach zeigen die LEDs nur noch die Odds (blinkt) |
 | Tap-Write | **TAP** im Takt | wird auf den nächsten 16tel gerundet |
 | Pattern-Länge (gilt für beide Parts) | **CLEAR halten + Step** im 1st PART | |
 | 2nd PART entfernen | **CLEAR halten + Step 1** im 2nd PART | |
@@ -142,7 +143,7 @@ Gespeichert wird **immer automatisch am Taktende**.
 | Alle Mutes aufheben | **CLEAR + Instrument 1** | |
 | Solo | **CLEAR + Instrument** | wie bisher |
 
-Die **PRE-SCALE-LEDs 1–4 zählen die Durchläufe** des Patterns, solange es läuft. Daran siehst du, wann Steps mit Odds „jeder 2./3./4. Durchlauf“ dran sind: Sie spielen bei LED 1, „jeder 2.“ auch bei LED 3. Odds und Ratchets: höchstens **31 Steps pro Pattern** (beide Parts und Variationen zusammen). Ist die Liste voll, blinken die Steps kurz.
+Die **PRE-SCALE-LEDs 1–4 zählen die Durchläufe** des Patterns, solange es läuft. Daran siehst du, wann Steps mit Odds „jeder 2./3./4. Durchlauf“ dran sind: Sie spielen bei LED 1, „jeder 2.“ auch bei LED 3. **Steps mit Odds oder Ratchet** erkennst du in der Step-Reihe daran, dass sie zweimal pro Sekunde kurz ausgehen (gilt für das gewählte Instrument, in EDIT und in PERFORM bei STEPS SETZEN). Odds und Ratchets: höchstens **31 Steps pro Pattern** (beide Parts und Variationen zusammen). Ist die Liste voll, blinken die Steps kurz.
 
 ---
 
