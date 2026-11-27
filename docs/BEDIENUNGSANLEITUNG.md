@@ -95,12 +95,12 @@ Der Song-Modus ist entfernt.
 | Funktion | Tasten | Hinweis |
 |---|---|---|
 | Instrument spielen | **Step 2–12** = BD, SD, LT, MT, HT, RS, CP, CB, CY, OH, CH | Anschlagen spielt sofort bzw. auf dem nächsten 16tel. **Halten = 16tel-Wirbel im Takt.** Mehrere Pads gleichzeitig gehen. Spielt auch, wenn das Instrument gemutet ist. |
-| Congas, Claves, Maracas | **SHIFT + Step 4–8** | |
-| Mit Accent | **Step 1 halten** + Pads | |
+| Congas, Claves, Maracas | **SHIFT + Step 4–8** | Tom/Conga, Rimshot/Claves und Clap/Maracas teilen sich je eine Stimme: Spielt das Pattern auf demselben 16tel das Gegenstück, klingt nur eins von beiden. |
+| Mit Accent | **Step 1 halten** + Pads | Der Accent gilt beim 808-Schaltkreis für den ganzen Schlag, also auch für Pattern-Instrumente auf diesem 16tel. |
 | Mute-Szene abrufen / speichern | **Step 13–16** drücken / halten | wie in der Pattern-Ebene |
 | Fill-In wählen | **SHIFT + Step 13–16** | |
 
-Anzeige: Gehaltene Pads und gerade gespielte Instrumente leuchten. Mute-Szenen mit Inhalt leuchten, leere blitzen alle 2 Sekunden kurz auf. Steps setzen geht in PERFORM nur über STEPS SETZEN (I/F-VAR auf MUTE).
+Anzeige: Gehaltene Pads und gerade gespielte Instrumente leuchten. Mute-Szenen mit Inhalt leuchten, leere blitzen alle 2 Sekunden kurz auf. Mit gehaltenem SHIFT zeigt 13–16 den gewählten Fill-In. Steps setzen geht in PERFORM nur über STEPS SETZEN (I/F-VAR auf MUTE).
 
 | Funktion | Tasten | Hinweis |
 |---|---|---|
@@ -116,7 +116,7 @@ Anzeige: Gehaltene Pads und gerade gespielte Instrumente leuchten. Mute-Szenen m
 | Pattern wählen | **Step 1–12** | beendet eine Kette |
 | Kette | **Pattern halten + zweites Pattern drücken** | spielt vom ersten bis zum zweiten Pattern im Kreis, nur in PERFORM |
 | Mute-Szene abrufen | **Step 13–16 drücken** | sofort beim Drücken |
-| Mute-Szene speichern | **Step 13–16 halten** (ca. ½ s) | Der Step blinkt schnell, die Mutes von vor dem Drücken kommen zurück und werden übernommen. Solange du hältst, kannst du mit den Instrument-Tasten weitere muten oder entmuten. Gespeichert wird beim Loslassen. |
+| Mute-Szene speichern | **Step 13–16 halten** (ca. 1 s) | Der Step blinkt schnell, die Mutes von vor dem Drücken kommen zurück und werden übernommen. Solange du hältst, kannst du mit den Instrument-Tasten weitere muten oder entmuten. Gespeichert wird beim Loslassen. |
 | Fill-In wählen (auch während es läuft) | **SHIFT halten + Step 13–16** | Bei gehaltenem SHIFT leuchtet der gewählte Fill wie ein Pattern. TAP spielt ihn im nächsten Takt. |
 | Pattern kopieren | **SHIFT halten + Quelle**, dann **SHIFT halten + Ziel** | Quelle blinkt; Bankwechsel dazwischen erlaubt; Quelle nochmal = Abbruch |
 | Pattern löschen | **CLEAR halten + Pattern zweimal drücken** | |

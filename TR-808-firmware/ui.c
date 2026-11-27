@@ -96,7 +96,7 @@ static uint8_t pad_inst[NUM_STEPS]; //PERFORM pads: voice of each pad (set on pr
  * the scene, mutes changed while it is held are added, stored when the key is released */
 static uint8_t scene_hold = NONE, scene_storing;
 static uint16_t scene_hold_t, scene_prev_mutes;
-#define SCENE_HOLD_TICKS 40
+#define SCENE_HOLD_TICKS 100 //1 s: a relaxed live press must not overwrite a scene
 
 void ui_init(void) {
 	//Timer4: 10 ms tick (16 MHz / 1024 / 156), CTC mode set up in setup_clock()
@@ -278,13 +278,14 @@ static void pad_press(uint8_t k) {
 		d += SW_DRUM_OFFSET;
 	}
 	pad_inst[k] = d;
+	uint8_t vel = ((deb[4] | spi_previous_switch_data[4]) & 1) ? 127 : 0; //pad 1 held: accent
 	if (!sequencer.START) {
-		trigger_drum(d, 0);
+		trigger_drum(d, vel);
 		return;
 	}
 	uint8_t part, step;
 	if (locate_hit(&part, &step) == TAP_CURRENT_SOUNDED) {
-		trigger_drum(d, 0); //the step just played: sound now, repeats from the next step
+		trigger_drum(d, vel); //the step just played: sound now, repeats from the next step
 	} else {
 		pad_once_mask |= (1u << d); //belongs to the next step: plays there even if the pad is released before
 	}
@@ -552,6 +553,7 @@ static void scene_service(void) {
 static void recall_scene(uint8_t n);
 static void scene_press(uint8_t k) {
 	if (scene_hold != NONE && ((raw_steps() >> scene_hold) & 1)) return; //one scene at a time (only while it is really held)
+	if (scene_hold != NONE && scene_storing) save_scene(scene_hold - BASIC_RHYTHM); //released in this tick: store it first
 	scene_hold = k;
 	scene_hold_t = now_t;
 	scene_storing = 0;
@@ -946,20 +948,24 @@ static void render_steps(uint8_t blink, uint8_t fast) {
 	} else if (hs_step != NONE) {
 		m = inst_mask_for(sequencer.part_editing);
 		if (fast) m ^= hs_mask; //all held steps blink
-	} else if (sequencer.SHIFT && !(sequencer.pattern_layer && perform())) {
+	} else if (sequencer.SHIFT && !(sequencer.pattern_layer && perform()) && !pads_active()) {
 		if (!sequencer.START && sequencer.clock_mode == DIN_SYNC_SLAVE) {
 			m = 1u << clock.sync_count_index;
 		} else {
 			m = 1u << sequencer.new_shuffle_amount;
 		}
 		if (!sequencer.START && IS_EDIT(sequencer.mode) && sequencer.din_reset_enable) m |= 1u << DIN_RESET_STEP;
-	} else if (pads_active() && !sequencer.SHIFT) {
+	} else if (pads_active()) {
 		//pads: held pads and voices that just played; scenes: stored = on, empty = short flash every 2 s
 		m = (deb[4] | ((uint16_t)deb[3] << 8)) & 0x0FFF;
 		m |= (inst_flash_mask & 0x07FF) << 1; //BD..CH -> pads 2-12
 		m |= ((inst_flash_mask >> SW_DRUM_OFFSET) & 0x7C) << 1; //LC..MA -> pads 4-8
-		for (uint8_t n = 0; n < 4; n++) {
-			if (mute_scene[n] != 0xFFFF || (now_t % 200) < 8) m |= 1u << (BASIC_RHYTHM + n);
+		if (sequencer.SHIFT) { //SHIFT + 13-16 chooses the fill: show it
+			m |= 1u << sequencer.current_intro_fill;
+		} else {
+			for (uint8_t n = 0; n < 4; n++) {
+				if (mute_scene[n] != 0xFFFF || (now_t % 200) < 8) m |= 1u << (BASIC_RHYTHM + n);
+			}
 		}
 		if (scene_hold != NONE && scene_storing) {
 			if (fast) m |= (1u << scene_hold); else m &= ~(1u << scene_hold);
