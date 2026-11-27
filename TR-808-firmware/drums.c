@@ -48,6 +48,7 @@ struct drum_hit drum_hit[17] = { //progmem?
 uint16_t inst_flash_mask = 0;
 uint16_t pad_repeat_mask = 0, pad_once_mask = 0;
 uint8_t pad_accent = 0;
+uint8_t pad_record = 0;
 uint8_t accent_flash = 0;
 
 /* fixed trigger outputs: OUT 1 = Low Tom, OUT 2 = Low Conga (muted voices stay silent) */
@@ -157,6 +158,12 @@ void trigger_step(uint8_t part_playing) { //trigger all drums on the play step
 		if ((pads >> i) & 1) set_voice(i);
 	}
 	if (pads) any = 1;
+	if (pads && pad_record) { //record the pad hits on the step that is playing
+		sequencer.pattern[var].part[part_playing][step] |= pads;
+		if (pad_accent) sequencer.pattern[var].accent[part_playing] |= (1u << step);
+		flag.pattern_edit = 1;
+		if (part_playing == SECOND) sequencer.second_untouched = 0;
+	}
 	sequencer.skip_mask = 0;
 	ratchet_accent = 0;
 	if (((sequencer.pattern[var].accent[part_playing] >> step) & 1) || (pads && pad_accent)) {

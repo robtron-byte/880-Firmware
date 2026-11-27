@@ -96,6 +96,7 @@ Der Song-Modus ist entfernt.
 |---|---|---|
 | Instrument spielen | **Step 2–12** = BD, SD, LT, MT, HT, RS, CP, CB, CY, OH, CH | Anschlagen spielt sofort bzw. auf dem nächsten 16tel. **Halten = 16tel-Wirbel im Takt.** Mehrere Pads gleichzeitig gehen. Spielt auch, wenn das Instrument gemutet ist. |
 | Congas, Claves, Maracas | **SHIFT + Step 4–8** | Tom/Conga, Rimshot/Claves und Clap/Maracas teilen sich je eine Stimme: Spielt das Pattern auf demselben 16tel das Gegenstück, klingt nur eins von beiden. |
+| Pads aufnehmen | **SHIFT + TAP halten** + Pads | Solange beide gehalten werden, werden die Schläge und Wirbel ins Pattern geschrieben (auf die 16tel, die gerade spielen). Mit SHIFT + TAP werden Pad 4–8 dabei nicht auf Congas umgeschaltet. In der Pad-Ebene löst SHIFT + TAP kein Reload aus. |
 | Mit Accent | **Step 1 halten** + Pads | Der Accent gilt beim 808-Schaltkreis für den ganzen Schlag, also auch für Pattern-Instrumente auf diesem 16tel. |
 | Mute-Szene abrufen / speichern | **Step 13–16** drücken / halten | wie in der Pattern-Ebene |
 | Fill-In wählen | **SHIFT + Step 13–16** | |

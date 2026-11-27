@@ -273,7 +273,7 @@ static uint8_t pads_active(void) {
 static void pad_press(uint8_t k) {
 	if (k == 0) return; //accent pad: only while held
 	uint8_t d = k - 1;
-	if (sequencer.SHIFT && k >= 3 && k <= 7) {
+	if (sequencer.SHIFT && !sequencer.TAP_HELD && k >= 3 && k <= 7) { //SHIFT + TAP = recording: no voice switch
 		m_shift.used = 1;
 		d += SW_DRUM_OFFSET;
 	}
@@ -286,6 +286,10 @@ static void pad_press(uint8_t k) {
 	uint8_t part, step;
 	if (locate_hit(&part, &step) == TAP_CURRENT_SOUNDED) {
 		trigger_drum(d, vel); //the step just played: sound now, repeats from the next step
+		if (sequencer.SHIFT && sequencer.TAP_HELD && step <= sequencer.step_num[part]) { //recording: onto that step
+			write_hit(part, step, d);
+			if (vel) write_hit(part, step, AC);
+		}
 	} else {
 		pad_once_mask |= (1u << d); //belongs to the next step: plays there even if the pad is released before
 	}
@@ -295,6 +299,8 @@ static void pad_press(uint8_t k) {
 static void update_pads(void) {
 	uint16_t mask = 0;
 	uint8_t acc = 0;
+	pad_record = pads_active() && sequencer.START && sequencer.SHIFT && sequencer.TAP_HELD;
+	if (pad_record) flag.fill = 0; //TAP pressed before SHIFT: it is a recording, not a fill
 	if (pads_active() && sequencer.START) {
 		uint16_t held = deb[4] | ((uint16_t)deb[3] << 8);
 		for (uint8_t k = 1; k < BASIC_RHYTHM; k++) {
@@ -406,7 +412,9 @@ static void handle_tap(void) {
 		cycle_attr(1);
 		return;
 	}
-	if (sequencer.SHIFT) {
+	if (sequencer.SHIFT && pads_active()) { //pad layer: SHIFT + TAP held = record the pads (no reload)
+		m_shift.used = 1;
+	} else if (sequencer.SHIFT) {
 		m_shift.used = 1;
 		do_reload();
 	} else if (sequencer.ALT && perform()) {

@@ -49,6 +49,7 @@ extern uint16_t inst_flash_mask; //instrument LEDs to flash (trigger feedback)
 extern uint16_t pad_repeat_mask; //PERFORM pads held: these voices play on every step (16th repeat)
 extern uint16_t pad_once_mask; //pad hit that belongs to the next step (played once there)
 extern uint8_t pad_accent; //accent pad held
+extern uint8_t pad_record; //SHIFT + TAP held: pad hits are written into the pattern
 extern uint8_t accent_flash;
 void trigger_drum(uint8_t note, uint8_t velocity);
 void trigger_step(uint8_t part_playing);
