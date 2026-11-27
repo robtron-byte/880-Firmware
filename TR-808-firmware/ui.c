@@ -513,7 +513,17 @@ static void pattern_layer_step(uint8_t k) {
 			} else {
 				if (copy_src == sequencer.current_pattern && copy_src_bank == sequencer.pattern_bank) flush_current();
 				if (storage_queue_copy(copy_src, copy_src_bank, k, bank)) {
-					if (k == sequencer.current_pattern && bank == sequencer.pattern_bank) {
+					if (k == sequencer.current_pattern && bank == sequencer.pattern_bank && fill_active) {
+						//the playing fill/intro slot was overwritten: keep it a fill, never write the old content back
+						flag.pattern_edit = 0;
+						flag.length_change = 0;
+						flag.second_clear = 0;
+						if (sequencer.START) {
+							fill_no_save = 1;
+						} else {
+							read_next_pattern(k, bank); //stopped intro: show the copied content, intro stays on
+						}
+					} else if (k == sequencer.current_pattern && bank == sequencer.pattern_bank) {
 						//the playing pattern was overwritten: take the new content, drop unsaved edits
 						flag.pattern_edit = 0;
 						flag.length_change = 0;

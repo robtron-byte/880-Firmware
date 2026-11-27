@@ -142,6 +142,7 @@ void process_tick(void) {
 uint8_t reload_pending = 0;
 uint8_t reload_current = 0; //current pattern was overwritten by a copy: reload it at the next measure end, drop RAM edits
 uint8_t fill_active = 0; //a fill or intro is playing instead of the basic pattern
+uint8_t fill_no_save = 0; //the playing fill slot was overwritten by a copy: never write its RAM back
 uint8_t fill_from_pattern, fill_from_bank; //basic pattern to return to
 
 static uint8_t is_fill_return(uint8_t p, uint8_t b) {
@@ -238,14 +239,23 @@ void process_stop(void) {
 		flag.pattern_change = 0;
 		inst_flash_mask = 0;
 		//apply pending measure-end changes now
-		reload_pending = 0;
+		if (fill_no_save) flag.pattern_edit = 0;
 		if (reload_current) { //copied content must be loaded, RAM edits are dropped
+			reload_pending = 0;
 			reload_current = 0;
 			flag.pattern_edit = 0;
 			flag.length_change = 0;
 			flag.second_clear = 0;
 			if (sequencer.new_pattern == sequencer.current_pattern && sequencer.new_bank == sequencer.pattern_bank) {
 				pattern_load(sequencer.current_pattern, sequencer.pattern_bank);
+			}
+		}
+		if (reload_pending) { //SHIFT + TAP shortly before STOP: restore now instead of saving the edits
+			reload_pending = 0;
+			if (storage_reload()) {
+				flag.pattern_edit = 1;
+				flag.length_change = 0;
+				flag.second_clear = 0;
 			}
 		}
 		if (flag.second_clear || flag.length_change) apply_length_changes();
@@ -380,6 +390,11 @@ void process_new_measure(void) {
 			flag.length_change = 0;
 			flag.second_clear = 0;
 		}
+	}
+	if (fill_no_save) { //fill slot overwritten by a copy: drop the edits of the old fill content
+		flag.pattern_edit = 0;
+		flag.length_change = 0;
+		flag.second_clear = 0;
 	}
 	if (flag.second_clear || flag.length_change) apply_length_changes();
 	if (flag.pattern_edit == 1) {
@@ -549,6 +564,7 @@ void pattern_take(uint8_t pattern_num, uint8_t pattern_bank, uint8_t backup) {
 	sequencer.current_pattern = sequencer.new_pattern = pattern_num;
 	sequencer.pattern_bank = sequencer.new_bank = pattern_bank;
 	fill_active = 0;
+	fill_no_save = 0;
 	flag.intro = 0;
 	if (sequencer.mode == SECOND_PART) second_part_autocopy(); //still editing the 2nd part
 	if (changed) reload_pending = 0;

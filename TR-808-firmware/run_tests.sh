@@ -2,7 +2,7 @@
 # Host unit tests (gcc + Unity). Run from this directory or via `make test`.
 set -u
 CC=${CC:-gcc}
-CFLAGS="-Wall -Werror -std=c99 -fpack-struct"
+CFLAGS="-Wall -Werror -std=c99 -fpack-struct -funsigned-char -funsigned-bitfields -fshort-enums" #same type rules as the firmware
 OUT=$(mktemp -d)
 trap 'rm -rf "$OUT"' EXIT
 status=0

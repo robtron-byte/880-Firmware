@@ -160,6 +160,7 @@ extern uint8_t pre_scale[4];
 extern uint8_t reload_pending; //SHIFT + TAP while running: reload at the end of the measure
 extern uint8_t reload_current; //copy onto the current pattern: reload it at the next measure end
 extern uint8_t fill_active;
+extern uint8_t fill_no_save;
 extern uint8_t fill_from_pattern, fill_from_bank;
 extern uint8_t recall_dirty; //last pattern/bank must be stored in the recall data
 

@@ -18,6 +18,7 @@
 #include "twi_eeprom.h"
 #include "twi.h"
 #include "hardware.h"
+#include "leds.h"
 
 
 // prototype local functiosn
@@ -234,6 +235,7 @@ void eeprom_write_recall_data() {
 	TWI_master_start_write(     EEPROM_DEVICE_ID,       // device address of eeprom chip
 	2 + sizeof(recall_data)
 	);
+	mark_write();
 	while(TWI_busy);//added by omar to protect twi buffer
 	
 }
@@ -263,7 +265,8 @@ void handle_TWI_result(uint8_t return_code){
 
 uint16_t mute_scene[NUM_SCENES];
 
-static struct attr_block attr_to_write; //snapshot for the background writer, also used as job buffer
+static struct attr_block attr_to_write; //snapshot for the background writer
+static struct attr_block job_attr; //attributes of the job source, read together with the pattern data
 static uint8_t attr_write_slot;
 static uint8_t attr_write_pending = 0;
 
@@ -367,11 +370,19 @@ static uint8_t queue_job(uint8_t type, uint8_t sp, uint8_t sb, uint8_t dp, uint8
 	return 1;
 }
 
+static void drain_job(void) { //finish a running (backup) job so a user job can start
+	draining = 1;
+	while (job.type != JOB_NONE) storage_service();
+	draining = 0;
+}
+
 uint8_t storage_queue_copy(uint8_t src_pattern, uint8_t src_bank, uint8_t dst_pattern, uint8_t dst_bank) {
+	drain_job();
 	return queue_job(JOB_COPY, src_pattern, src_bank, dst_pattern, dst_bank);
 }
 
 uint8_t storage_queue_clear(uint8_t dst_pattern, uint8_t dst_bank) {
+	drain_job();
 	return queue_job(JOB_CLEAR, 0, 0, dst_pattern, dst_bank);
 }
 
@@ -386,7 +397,9 @@ void storage_queue_backup(void) {
 static void start_backup(void) {
 	if (job.type != JOB_NONE) return; //retried when the user copy/clear job is done
 	//the stored version must be current: unsaved changes would end up in the backup otherwise
-	if (backup_pattern != sequencer.current_pattern || backup_bank != sequencer.pattern_bank) {
+	uint8_t basic_p = fill_active ? fill_from_pattern : sequencer.current_pattern; //a fill may be playing
+	uint8_t basic_b = fill_active ? fill_from_bank : sequencer.pattern_bank;
+	if (backup_pattern != basic_p || backup_bank != basic_b) {
 		backup_wanted = 0; //pattern changed again before the backup could be made
 		return;
 	}
@@ -415,21 +428,16 @@ void storage_service(void) {
 			if (job.type == JOB_COPY) {
 				if (!read_settled()) return;
 				read_pattern_into(&pattern_to_write, job.src_pattern*PAGES_PER_PATTERN*PAGE_SIZE, job.src_bank);
+				attr_read(attr_slot(job.src_pattern, job.src_bank), &job_attr); //same moment as the notes
 			} else {
 				default_pattern_data(&pattern_to_write);
+				attr_clear(&job_attr);
 			}
 			pager_start(job.dst_pattern, job.dst_bank);
 			job.stage = 1;
 			break;
 		case 1: //pager finished (checked above): attributes
-			if (job.type == JOB_COPY) {
-				if (!read_settled()) return;
-				eeprom_read_block_blocking(attr_addr(attr_slot(job.src_pattern, job.src_bank)), &attr_to_write, ATTR_BYTES);
-				attr_validate(&attr_to_write);
-			} else {
-				attr_clear(&attr_to_write);
-			}
-			attr_write_async(attr_slot(job.dst_pattern, job.dst_bank), &attr_to_write);
+			attr_write_async(attr_slot(job.dst_pattern, job.dst_bank), &job_attr);
 			if (job.dst_bank == BACKUP_BANK) {
 				backup_valid = (job.src_pattern == backup_pattern && job.src_bank == backup_bank);
 			} else if (job.dst_pattern == backup_pattern && job.dst_bank == backup_bank) {
@@ -467,6 +475,9 @@ uint8_t storage_reload(void) {
 	}
 	#undef p
 	attr_read(ATTR_SLOT_BACKUP, &pattern_attrs);
+	sequencer.second_untouched = 0;
+	if (sequencer.mode == SECOND_PART) second_part_autocopy(); //restored pattern may have no 2nd part
+	update_inst_led_mask();
 	return 1;
 }
 
@@ -482,6 +493,9 @@ void scene_write(uint8_t scene) {
 // This function will clear every pattern by blocking while it writes to each page. It should
 // only be run in special situations (like resetting the system).
 void clear_all_patterns(void) {
+	draining = 1; //finish queued writes first, they would put old data back afterwards
+	while (!storage_idle()) storage_service();
+	draining = 0;
 	wdt_disable(); //disable watchdog timer when clearing all patters as it takes longer than 1 second
 	default_pattern_data(&pattern_to_write);
 	struct attr_block empty;
